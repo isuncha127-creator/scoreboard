@@ -164,9 +164,13 @@ def load_data():
             "BM_W": safe(COL["BM_W"]),
             "EX_W": safe(COL["EX_W"]),
             "EX_AW": safe(COL["EX_AW"]),
+            "Total_B": safe(COL["Total_B"]),
             "B": safe(COL["B"]),
+            "Total_C": safe(COL["Total_C"]),
             "C": safe(COL["C"]),
+            "Total_Q": safe(COL["Total_Q"]),
             "Q": safe(COL["Q"]),
+            "Total_M": safe(COL["Total_M"]),
             "M": safe(COL["M"]),
             "Final_S": safe(COL["Final_S"]),
             "선택": safe(COL["선택"]),
@@ -180,7 +184,8 @@ def load_data():
 
     # 숫자형 변환
     num_cols = ["MCW_Inter", "EW_Inter", "BM_W", "EX_W", "EX_AW",
-                "B", "C", "Q", "M", "Final_S", "선택", "최종포트", "최종AW", "시가총액"]
+                "Total_B", "B", "Total_C", "C", "Total_Q", "Q", "Total_M", "M",
+                "Final_S", "선택", "최종포트", "최종AW", "시가총액"]
     for c in num_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
@@ -509,33 +514,6 @@ def fmt_pct(v, decimals=1):
     return f"{v * 100:.{decimals}f}%"
 
 
-def kpi_card(col, label, value, target=None, is_count=False):
-    if is_count:
-        display = f"{int(value)}" if value else "N/A"
-        color = "#1f77b4"
-        sub = ""
-    else:
-        display = fmt_pct(value)
-        if target is not None:
-            ok = value >= target if value else False
-            color = "#2ca02c" if ok else "#d62728"
-            sub = f"기준: {fmt_pct(target)}"
-        else:
-            color = "#1f77b4"
-            sub = ""
-
-    col.markdown(
-        f"""
-        <div style='background:#f0f2f6;border-radius:10px;padding:16px 20px;margin:4px 0;border-left:5px solid {color}'>
-            <div style='font-size:13px;color:#555;margin-bottom:4px'>{label}</div>
-            <div style='font-size:28px;font-weight:700;color:{color}'>{display}</div>
-            <div style='font-size:12px;color:#888'>{sub}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def score_bar_color(v):
     if pd.isna(v):
         return ""
@@ -551,77 +529,59 @@ def score_bar_color(v):
 def tab_overview(df, kpi):
     st.subheader("포트폴리오 개요")
 
-    # KPI 카드
-    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-    kpi_card(c1, "리밸 종목수", kpi["리밸_종목수"]["value"], is_count=True)
-    kpi_card(c2, "현재 종목수", kpi["현재_종목수"]["value"], is_count=True)
-    kpi_card(c3, "Inter 복제율", kpi["Inter_복제율"]["value"], target=0.50)
-    kpi_card(c4, "ExPort 복제율", kpi["ExPort_복제율"]["value"])
-    kpi_card(c5, "턴오버", kpi["턴오버"]["value"])
-    kpi_card(c6, "인터브랜드 비중", kpi["인터브랜드_비중"]["value"], target=0.60)
-    kpi_card(c7, "BM 복제율", kpi["BM_복제율"]["value"], target=0.30)
+    kpi_rows = [
+        {"항목": "리밸 종목수", "값": f"{int(kpi['리밸_종목수']['value'])}", "기준": "—"},
+        {"항목": "현재 종목수", "값": f"{int(kpi['현재_종목수']['value'])}", "기준": "—"},
+        {"항목": "Inter 복제율", "값": fmt_pct(kpi["Inter_복제율"]["value"]), "기준": fmt_pct(0.50)},
+        {"항목": "ExPort 복제율", "값": fmt_pct(kpi["ExPort_복제율"]["value"]), "기준": "—"},
+        {"항목": "턴오버", "값": fmt_pct(kpi["턴오버"]["value"]), "기준": "—"},
+        {"항목": "인터브랜드 비중", "값": fmt_pct(kpi["인터브랜드_비중"]["value"]), "기준": fmt_pct(0.60)},
+        {"항목": "BM 복제율", "값": fmt_pct(kpi["BM_복제율"]["value"]), "기준": fmt_pct(0.30)},
+    ]
+    st.dataframe(pd.DataFrame(kpi_rows), hide_index=True, use_container_width=True)
 
     st.divider()
 
     port_df = df[df["편입"]].copy()
+    total_n = len(df)
+    included_n = int(df["편입"].sum())
+    included_pct = included_n / total_n if total_n else 0
 
-    col_l, col_r = st.columns([1.2, 1])
+    st.markdown(
+        f"**편입 종목 최종 스코어 순위** · 편입 {included_n}/{total_n}종목 ({included_pct*100:.1f}%)"
+    )
+    rank_df = (
+        port_df[["Name", "GICS", "Country",
+                 "Total_B", "B", "Total_C", "C", "Total_Q", "Q", "Total_M", "M",
+                 "Final_S", "최종AW"]]
+        .sort_values("Final_S", ascending=False)
+        .reset_index(drop=True)
+    )
+    rank_df.index += 1
+    rank_df.columns = ["종목명", "섹터", "국가",
+                        "브랜드(Total)", "브랜드", "경쟁력(Total)", "경쟁력",
+                        "Quality(Total)", "Quality", "Macro(Total)", "Macro",
+                        "최종", "비중(AW)"]
+    rank_df["비중(AW)"] = rank_df["비중(AW)"].apply(fmt_pct)
 
-    with col_l:
-        st.markdown("**편입 종목 최종 스코어 순위**")
-        rank_df = (
-            port_df[["Name", "GICS", "Country", "B", "C", "Q", "M", "Final_S", "최종AW"]]
-            .sort_values("Final_S", ascending=False)
-            .reset_index(drop=True)
-        )
-        rank_df.index += 1
-        rank_df.columns = ["종목명", "섹터", "국가", "브랜드", "경쟁력", "Quality", "Macro", "최종", "비중(AW)"]
-        rank_df["비중(AW)"] = rank_df["비중(AW)"].apply(fmt_pct)
+    score_cols = ["브랜드(Total)", "브랜드", "경쟁력(Total)", "경쟁력",
+                  "Quality(Total)", "Quality", "Macro(Total)", "Macro", "최종"]
+    styled = rank_df.style.map(
+        score_bar_color, subset=["브랜드", "경쟁력", "Quality", "Macro", "최종"]
+    ).format({c: "{:.2f}" for c in score_cols}, na_rep="—")
+    st.dataframe(styled, height=700, use_container_width=True)
 
-        styled = rank_df.style.map(
-            score_bar_color, subset=["브랜드", "경쟁력", "Quality", "Macro", "최종"]
-        ).format({"브랜드": "{:.2f}", "경쟁력": "{:.2f}", "Quality": "{:.2f}", "Macro": "{:.2f}", "최종": "{:.2f}"}, na_rep="—")
-        st.dataframe(styled, height=520, use_container_width=True)
-
-    with col_r:
-        total_n = len(df)
-        included_n = int(df["편입"].sum())
-        included_pct = included_n / total_n if total_n else 0
-        st.markdown(
-            f"**섹터별 편입/미편입 종목수** · 편입 {included_n}/{total_n}종목 ({included_pct*100:.1f}%)"
-        )
-        sector_cnt = (
-            df.groupby(["GICS", "편입"])
-            .size()
-            .reset_index(name="count")
-        )
-        sector_cnt["상태"] = sector_cnt["편입"].map({True: "편입", False: "유니버스"})
-        fig = px.bar(
-            sector_cnt,
-            x="count", y="GICS",
-            color="상태",
-            orientation="h",
-            color_discrete_map={"편입": "#4C72B0", "유니버스": "#d3d3d3"},
-            category_orders={"GICS": SECTOR_ORDER},
-        )
-        fig.update_layout(
-            margin=dict(l=0, r=0, t=10, b=10), height=420,
-            legend=dict(orientation="v", x=1, xanchor="right", y=0, yanchor="bottom",
-                        bgcolor="rgba(255,255,255,0.6)"),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("**최종 스코어 분포**")
-        fig2 = px.histogram(
-            df, x="Final_S", color="편입",
-            nbins=20,
-            color_discrete_map={True: "#4C72B0", False: "#d3d3d3"},
-            labels={"Final_S": "최종 스코어", "편입": "편입여부"},
-        )
-        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=220,
-                           legend=dict(orientation="h", y=1.1),
-                           bargap=0.05)
-        st.plotly_chart(fig2, use_container_width=True)
+    st.markdown("**최종 스코어 분포**")
+    fig2 = px.histogram(
+        df, x="Final_S", color="편입",
+        nbins=20,
+        color_discrete_map={True: "#4C72B0", False: "#d3d3d3"},
+        labels={"Final_S": "최종 스코어", "편입": "편입여부"},
+    )
+    fig2.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=260,
+                       legend=dict(orientation="h", y=1.1),
+                       bargap=0.05)
+    st.plotly_chart(fig2, use_container_width=True)
 
 
 def tab_factor(df):
