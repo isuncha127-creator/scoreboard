@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>03Y51 스코어보드</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0e1117; }
+  .topbar {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    background: #161a23;
+    border-bottom: 1px solid #2a2f3a;
+  }
+  .topbar a {
+    color: #9aa0ad;
+    text-decoration: none;
+    font-size: 14px;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .topbar a:hover { color: #fafafa; }
+  iframe {
+    width: 100%;
+    height: calc(100% - 44px);
+    border: none;
+    display: block;
+  }
+</style>
+</head>
+<body>
+  <div class="topbar"><a href="../">&larr; 허브로 돌아가기</a></div>
+  <iframe src="https://y51-scoreboard.streamlit.app" allow="clipboard-read; clipboard-write"></iframe>
+</body>
+</html>
