@@ -584,7 +584,12 @@ def tab_overview(df, kpi):
         st.dataframe(styled, height=520, use_container_width=True)
 
     with col_r:
-        st.markdown("**섹터별 편입/미편입 종목수**")
+        total_n = len(df)
+        included_n = int(df["편입"].sum())
+        included_pct = included_n / total_n if total_n else 0
+        st.markdown(
+            f"**섹터별 편입/미편입 종목수** · 편입 {included_n}/{total_n}종목 ({included_pct*100:.1f}%)"
+        )
         sector_cnt = (
             df.groupby(["GICS", "편입"])
             .size()
@@ -599,8 +604,11 @@ def tab_overview(df, kpi):
             color_discrete_map={"편입": "#4C72B0", "유니버스": "#d3d3d3"},
             category_orders={"GICS": SECTOR_ORDER},
         )
-        fig.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=420,
-                          legend=dict(orientation="h", y=1.05))
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=10, b=10), height=420,
+            legend=dict(orientation="v", x=1, xanchor="right", y=0, yanchor="bottom",
+                        bgcolor="rgba(255,255,255,0.6)"),
+        )
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("**최종 스코어 분포**")
