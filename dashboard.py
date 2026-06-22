@@ -588,6 +588,25 @@ def render_gb_table(label, gb_df, count_cols, bar_cols):
 def tab_overview(df, kpi, groupby2):
     st.subheader("포트폴리오 개요")
 
+    sector_chg = df.groupby("GICS")[["최종포트", "EX_W"]].sum()
+    sector_chg["변화"] = sector_chg["최종포트"] - sector_chg["EX_W"]
+    sector_chg = sector_chg.sort_values("변화", key=abs, ascending=False)
+    top_name = sector_chg.index[0]
+    top_chg = sector_chg["변화"].iloc[0]
+    direction = "증가" if top_chg > 0 else "감소"
+    st.markdown(
+        f"**업종별 최종포트 vs EX 비중 변화** · 가장 큰 변화: **{top_name}** "
+        f"({direction} {abs(top_chg) * 100:.1f}%p)"
+    )
+    sector_chg_disp = sector_chg.reset_index().rename(
+        columns={"GICS": "업종", "최종포트": "최종포트 비중", "EX_W": "EX 비중"}
+    )
+    for c in ["최종포트 비중", "EX 비중", "변화"]:
+        sector_chg_disp[c] = sector_chg_disp[c].apply(fmt_pct)
+    st.dataframe(sector_chg_disp, hide_index=True, use_container_width=True)
+
+    st.divider()
+
     kpi_rows = [
         {"항목": "리밸 종목수", "값": f"{int(kpi['리밸_종목수']['value'])}"},
         {"항목": "현재 종목수", "값": f"{int(kpi['현재_종목수']['value'])}"},
