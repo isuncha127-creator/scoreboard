@@ -563,18 +563,18 @@ def score_bar_color(v):
 
 # ─── 탭 렌더링 함수들 ─────────────────────────────────────────────────────────
 
-def render_gb_table(label, gb_df, count_cols):
+def render_gb_table(label, gb_df, count_cols, bar_cols):
     st.markdown(f"**{label}**")
     if gb_df.empty:
         st.caption("데이터 없음")
         return
-    disp = gb_df.copy()
-    for c in count_cols:
-        disp[c] = disp[c].apply(lambda v: f"{int(v)}" if pd.notna(v) else "—")
-    pct_cols = [c for c in disp.columns if c != "항목" and c not in count_cols]
-    for c in pct_cols:
-        disp[c] = disp[c].apply(fmt_pct)
-    st.dataframe(disp, hide_index=True, use_container_width=True)
+    pct_cols = [c for c in gb_df.columns if c != "항목" and c not in count_cols]
+    fmt = {c: "{:.0f}" for c in count_cols}
+    fmt.update({c: fmt_pct for c in pct_cols})
+    styled = gb_df.style.bar(
+        subset=[c for c in bar_cols if c in gb_df.columns], align="mid", color="#638EC6"
+    ).format(fmt, na_rep="—")
+    st.dataframe(styled, hide_index=True, use_container_width=True)
 
 
 def tab_overview(df, kpi, groupby2):
@@ -621,10 +621,11 @@ def tab_overview(df, kpi, groupby2):
     st.dataframe(styled, height=700, use_container_width=True, column_config=rank_col_cfg)
 
     st.divider()
-    render_gb_table("R_TR.GICSSector", groupby2["sector"], ["XPORT", "PORT", "차이"])
-    render_gb_table("테마별 비중", groupby2["theme"], ["XPORT", "PORT", "차이"])
-    render_gb_table("R_TR.GICSIndustryGroup", groupby2["industry_group"], ["XPORT", "PORT", "차이"])
-    render_gb_table("R_TR.CoRPriJaryCountry", groupby2["country"], [])
+    bar3 = ["차이", "Active", "XActive"]
+    render_gb_table("R_TR.GICSSector", groupby2["sector"], ["XPORT", "PORT", "차이"], bar3)
+    render_gb_table("테마별 비중", groupby2["theme"], ["XPORT", "PORT", "차이"], bar3)
+    render_gb_table("R_TR.GICSIndustryGroup", groupby2["industry_group"], ["XPORT", "PORT", "차이"], bar3)
+    render_gb_table("R_TR.CoRPriJaryCountry", groupby2["country"], [], ["Active", "XActive"])
 
 
 def tab_factor(df):
