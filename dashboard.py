@@ -530,35 +530,31 @@ def tab_overview(df, kpi):
     st.subheader("포트폴리오 개요")
 
     kpi_rows = [
-        {"항목": "리밸 종목수", "값": f"{int(kpi['리밸_종목수']['value'])}", "기준": "—"},
-        {"항목": "현재 종목수", "값": f"{int(kpi['현재_종목수']['value'])}", "기준": "—"},
-        {"항목": "Inter 복제율", "값": fmt_pct(kpi["Inter_복제율"]["value"]), "기준": fmt_pct(0.50)},
-        {"항목": "ExPort 복제율", "값": fmt_pct(kpi["ExPort_복제율"]["value"]), "기준": "—"},
-        {"항목": "턴오버", "값": fmt_pct(kpi["턴오버"]["value"]), "기준": "—"},
-        {"항목": "인터브랜드 비중", "값": fmt_pct(kpi["인터브랜드_비중"]["value"]), "기준": fmt_pct(0.60)},
-        {"항목": "BM 복제율", "값": fmt_pct(kpi["BM_복제율"]["value"]), "기준": fmt_pct(0.30)},
+        {"항목": "리밸 종목수", "값": f"{int(kpi['리밸_종목수']['value'])}"},
+        {"항목": "현재 종목수", "값": f"{int(kpi['현재_종목수']['value'])}"},
+        {"항목": f"Inter 복제율 (기준 {fmt_pct(0.50)})", "값": fmt_pct(kpi["Inter_복제율"]["value"])},
+        {"항목": "ExPort 복제율", "값": fmt_pct(kpi["ExPort_복제율"]["value"])},
+        {"항목": "턴오버", "값": fmt_pct(kpi["턴오버"]["value"])},
+        {"항목": f"인터브랜드 비중 (기준 {fmt_pct(0.60)})", "값": fmt_pct(kpi["인터브랜드_비중"]["value"])},
+        {"항목": f"BM 복제율 (기준 {fmt_pct(0.30)})", "값": fmt_pct(kpi["BM_복제율"]["value"])},
     ]
-    st.dataframe(pd.DataFrame(kpi_rows), hide_index=True, use_container_width=True)
+    kpi_col_cfg = {c: st.column_config.Column(width="medium") for c in ["항목", "값"]}
+    st.dataframe(pd.DataFrame(kpi_rows), hide_index=True, use_container_width=True, column_config=kpi_col_cfg)
 
     st.divider()
 
     port_df = df[df["편입"]].copy()
-    total_n = len(df)
-    included_n = int(df["편입"].sum())
-    included_pct = included_n / total_n if total_n else 0
 
-    st.markdown(
-        f"**편입 종목 최종 스코어 순위** · 편입 {included_n}/{total_n}종목 ({included_pct*100:.1f}%)"
-    )
+    st.markdown("**편입 종목 최종 스코어 순위**")
     rank_df = (
-        port_df[["Name", "GICS", "Country",
+        port_df[["Name", "GICS", "IndustryGroup", "Country",
                  "Total_B", "B", "Total_C", "C", "Total_Q", "Q", "Total_M", "M",
                  "Final_S", "최종AW"]]
         .sort_values("Final_S", ascending=False)
         .reset_index(drop=True)
     )
     rank_df.index += 1
-    rank_df.columns = ["종목명", "섹터", "국가",
+    rank_df.columns = ["종목명", "섹터", "산업군", "국가",
                         "브랜드(Total)", "브랜드", "경쟁력(Total)", "경쟁력",
                         "Quality(Total)", "Quality", "Macro(Total)", "Macro",
                         "최종", "비중(AW)"]
@@ -569,7 +565,8 @@ def tab_overview(df, kpi):
     styled = rank_df.style.map(
         score_bar_color, subset=["브랜드", "경쟁력", "Quality", "Macro", "최종"]
     ).format({c: "{:.2f}" for c in score_cols}, na_rep="—")
-    st.dataframe(styled, height=700, use_container_width=True)
+    rank_col_cfg = {c: st.column_config.Column(width="medium") for c in rank_df.columns}
+    st.dataframe(styled, height=700, use_container_width=True, column_config=rank_col_cfg)
 
     st.markdown("**최종 스코어 분포**")
     fig2 = px.histogram(
