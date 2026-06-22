@@ -565,7 +565,8 @@ def tab_overview(df, kpi):
     styled = rank_df.style.map(
         score_bar_color, subset=["브랜드", "경쟁력", "Quality", "Macro", "최종"]
     ).format({c: "{:.2f}" for c in score_cols}, na_rep="—")
-    rank_col_cfg = {c: st.column_config.Column(width="medium") for c in rank_df.columns}
+    rank_col_cfg = {c: st.column_config.Column(width="small") for c in score_cols + ["비중(AW)"]}
+    rank_col_cfg.update({c: st.column_config.Column(width="medium") for c in ["종목명", "섹터", "산업군", "국가"]})
     st.dataframe(styled, height=700, use_container_width=True, column_config=rank_col_cfg)
 
     st.markdown("**최종 스코어 분포**")
