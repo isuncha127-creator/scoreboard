@@ -588,14 +588,25 @@ def render_gb_table(label, gb_df, count_cols, bar_cols):
 def tab_overview(df, kpi, groupby2):
     st.subheader("포트폴리오 개요")
 
+    stock_chg = (df["최종포트"] - df["EX_W"])
+
+    def top_mover(sector):
+        sub = df[df["GICS"] == sector]
+        sub_chg = stock_chg.loc[sub.index]
+        return sub.loc[sub_chg.abs().idxmax(), "Name"], sub_chg.loc[sub_chg.abs().idxmax()]
+
     sector_chg = df.groupby("GICS")[["최종포트", "EX_W"]].sum()
     sector_chg["변화"] = sector_chg["최종포트"] - sector_chg["EX_W"]
     inc_name, inc_chg = sector_chg["변화"].idxmax(), sector_chg["변화"].max()
     dec_name, dec_chg = sector_chg["변화"].idxmin(), sector_chg["변화"].min()
     rest_max = sector_chg["변화"].drop([inc_name, dec_name]).abs().max()
+    inc_stock, inc_stock_chg = top_mover(inc_name)
+    dec_stock, dec_stock_chg = top_mover(dec_name)
     st.markdown(
-        f"- 최종포트가 EX 비중보다 가장 늘어난 업종: **{inc_name}** (+{inc_chg * 100:.1f}%p)\n"
-        f"- 최종포트가 EX 비중보다 가장 줄어든 업종: **{dec_name}** ({dec_chg * 100:.1f}%p)\n"
+        f"- 최종포트가 EX 비중보다 가장 늘어난 업종: **{inc_name}** (+{inc_chg * 100:.1f}%p), "
+        f"내 최대 변화 종목: {inc_stock} ({inc_stock_chg * 100:+.1f}%p)\n"
+        f"- 최종포트가 EX 비중보다 가장 줄어든 업종: **{dec_name}** ({dec_chg * 100:.1f}%p), "
+        f"내 최대 변화 종목: {dec_stock} ({dec_stock_chg * 100:+.1f}%p)\n"
         f"- 나머지 업종은 모두 ±{rest_max * 100:.1f}%p 이내로 변화가 작음"
     )
 
