@@ -590,20 +590,14 @@ def tab_overview(df, kpi, groupby2):
 
     sector_chg = df.groupby("GICS")[["최종포트", "EX_W"]].sum()
     sector_chg["변화"] = sector_chg["최종포트"] - sector_chg["EX_W"]
-    sector_chg = sector_chg.sort_values("변화", key=abs, ascending=False)
-    top_name = sector_chg.index[0]
-    top_chg = sector_chg["변화"].iloc[0]
-    direction = "증가" if top_chg > 0 else "감소"
+    inc_name, inc_chg = sector_chg["변화"].idxmax(), sector_chg["변화"].max()
+    dec_name, dec_chg = sector_chg["변화"].idxmin(), sector_chg["변화"].min()
+    rest_max = sector_chg["변화"].drop([inc_name, dec_name]).abs().max()
     st.markdown(
-        f"**업종별 최종포트 vs EX 비중 변화** · 가장 큰 변화: **{top_name}** "
-        f"({direction} {abs(top_chg) * 100:.1f}%p)"
+        f"- 최종포트가 EX 비중보다 가장 늘어난 업종: **{inc_name}** (+{inc_chg * 100:.1f}%p)\n"
+        f"- 최종포트가 EX 비중보다 가장 줄어든 업종: **{dec_name}** ({dec_chg * 100:.1f}%p)\n"
+        f"- 나머지 업종은 모두 ±{rest_max * 100:.1f}%p 이내로 변화가 작음"
     )
-    sector_chg_disp = sector_chg.reset_index().rename(
-        columns={"GICS": "업종", "최종포트": "최종포트 비중", "EX_W": "EX 비중"}
-    )
-    for c in ["최종포트 비중", "EX 비중", "변화"]:
-        sector_chg_disp[c] = sector_chg_disp[c].apply(fmt_pct)
-    st.dataframe(sector_chg_disp, hide_index=True, use_container_width=True)
 
     st.divider()
 
