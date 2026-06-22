@@ -417,8 +417,45 @@ def load_data():
 
     factor_detail["ticker_map"] = isin_yahoo_map
 
+    # ── 5. GroupBy_2: 섹터/테마/산업군/국가 비중 분석 ──
+    ws_gb2 = wb["GroupBy_2"]
+    gb2_rows = list(ws_gb2.iter_rows(values_only=True))
+
+    def gb_block(start, name_col, count_labels, count_cols, pct_labels, pct_cols):
+        recs = []
+        for row in gb2_rows[start:]:
+            name = row[name_col]
+            if not isinstance(name, str) or not name.strip():
+                break
+            rec = {"항목": name.strip()}
+            for label, c in zip(count_labels, count_cols):
+                rec[label] = row[c]
+            for label, c in zip(pct_labels, pct_cols):
+                rec[label] = row[c]
+            recs.append(rec)
+        return pd.DataFrame(recs)
+
+    groupby2 = {
+        "sector": gb_block(
+            4, 3, ["XPORT", "PORT", "차이"], [0, 1, 2],
+            ["PORT비중", "XPORT비중", "MCW", "EW", "URTH", "Active", "XActive"], [4, 5, 6, 7, 8, 9, 10],
+        ),
+        "theme": gb_block(
+            20, 3, ["XPORT", "PORT", "차이"], [0, 1, 2],
+            ["PORT비중", "XPORT비중", "MCW", "EW", "URTH", "Active", "XActive"], [4, 5, 6, 7, 8, 9, 10],
+        ),
+        "industry_group": gb_block(
+            4, 15, ["XPORT", "PORT", "차이"], [12, 13, 14],
+            ["PORT비중", "XPORT비중", "JCW", "EW", "URTH", "Active", "XActive"], [16, 17, 18, 19, 20, 21, 22],
+        ),
+        "country": gb_block(
+            4, 33, [], [],
+            ["PORT비중", "XPORT비중", "URTH", "Active", "XActive"], [34, 35, 36, 37, 38],
+        ),
+    }
+
     wb.close()
-    return df, kpi, themes, factor_detail
+    return df, kpi, themes, factor_detail, groupby2
 
 
 # ─── 라이브 수익률 ────────────────────────────────────────────────────────────
@@ -526,7 +563,21 @@ def score_bar_color(v):
 
 # ─── 탭 렌더링 함수들 ─────────────────────────────────────────────────────────
 
-def tab_overview(df, kpi):
+def render_gb_table(label, gb_df, count_cols):
+    st.markdown(f"**{label}**")
+    if gb_df.empty:
+        st.caption("데이터 없음")
+        return
+    disp = gb_df.copy()
+    for c in count_cols:
+        disp[c] = disp[c].apply(lambda v: f"{int(v)}" if pd.notna(v) else "—")
+    pct_cols = [c for c in disp.columns if c != "항목" and c not in count_cols]
+    for c in pct_cols:
+        disp[c] = disp[c].apply(fmt_pct)
+    st.dataframe(disp, hide_index=True, use_container_width=True)
+
+
+def tab_overview(df, kpi, groupby2):
     st.subheader("포트폴리오 개요")
 
     kpi_rows = [
@@ -569,17 +620,11 @@ def tab_overview(df, kpi):
     rank_col_cfg = {c: st.column_config.Column(width="small") for c in rank_df.columns}
     st.dataframe(styled, height=700, use_container_width=True, column_config=rank_col_cfg)
 
-    st.markdown("**최종 스코어 분포**")
-    fig2 = px.histogram(
-        df, x="Final_S", color="편입",
-        nbins=20,
-        color_discrete_map={True: "#4C72B0", False: "#d3d3d3"},
-        labels={"Final_S": "최종 스코어", "편입": "편입여부"},
-    )
-    fig2.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=260,
-                       legend=dict(orientation="h", y=1.1),
-                       bargap=0.05)
-    st.plotly_chart(fig2, use_container_width=True)
+    st.divider()
+    render_gb_table("R_TR.GICSSector", groupby2["sector"], ["XPORT", "PORT", "차이"])
+    render_gb_table("테마별 비중", groupby2["theme"], ["XPORT", "PORT", "차이"])
+    render_gb_table("R_TR.GICSIndustryGroup", groupby2["industry_group"], ["XPORT", "PORT", "차이"])
+    render_gb_table("R_TR.CoRPriJaryCountry", groupby2["country"], [])
 
 
 def tab_factor(df):
@@ -1254,7 +1299,7 @@ def main():
     st.caption("03Y51 운용파일_20260602(6월)_mk.xlsx 기준")
 
     try:
-        df, kpi, themes, factor_detail = load_data()
+        df, kpi, themes, factor_detail, groupby2 = load_data()
     except Exception as e:
         st.error(f"데이터 로드 실패: {e}")
         return
@@ -1272,7 +1317,7 @@ def main():
     import traceback
     with tabs[0]:
         try:
-            tab_overview(df, kpi)
+            tab_overview(df, kpi, groupby2)
         except Exception as e:
             st.error(f"[탭1 에러] {e}")
             st.code(traceback.format_exc())
