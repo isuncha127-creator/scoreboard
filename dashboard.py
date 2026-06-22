@@ -610,6 +610,24 @@ def tab_overview(df, kpi, groupby2):
         f"- 나머지 업종은 모두 ±{rest_max * 100:.1f}%p 이내로 변화가 작음"
     )
 
+    aw_chg = df["최종AW"] - df["EX_AW"]
+    up_sectors = sector_chg[sector_chg["변화"] >= 0.02].index.tolist()
+    for sec in up_sectors:
+        sub = df[df["GICS"] == sec]
+        sub_aw_chg = aw_chg.loc[sub.index]
+        hits = sub.loc[sub_aw_chg[sub_aw_chg.abs() >= 0.02].index]
+        if not hits.empty:
+            names = ", ".join(
+                f"{n} ({c * 100:+.1f}%p)" for n, c in zip(hits["Name"], sub_aw_chg.loc[hits.index])
+            )
+            st.markdown(f"- **{sec}** (비중 +{sector_chg.loc[sec, '변화'] * 100:.1f}%p) 내 AW가 2%p 이상 변한 종목: {names}")
+        else:
+            closest_idx = sub_aw_chg.abs().idxmax()
+            st.markdown(
+                f"- **{sec}** (비중 +{sector_chg.loc[sec, '변화'] * 100:.1f}%p) 내에는 AW가 2%p 이상 변한 종목 없음 "
+                f"(최대 변화: {sub.loc[closest_idx, 'Name']} {sub_aw_chg.loc[closest_idx] * 100:+.1f}%p)"
+            )
+
     st.divider()
 
     kpi_rows = [
