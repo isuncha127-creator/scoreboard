@@ -568,13 +568,21 @@ def render_gb_table(label, gb_df, count_cols, bar_cols):
     if gb_df.empty:
         st.caption("데이터 없음")
         return
-    pct_cols = [c for c in gb_df.columns if c != "항목" and c not in count_cols]
-    fmt = {c: "{:.0f}" for c in count_cols}
-    fmt.update({c: fmt_pct for c in pct_cols})
-    styled = gb_df.style.bar(
-        subset=[c for c in bar_cols if c in gb_df.columns], align="mid", color="#638EC6"
-    ).format(fmt, na_rep="—")
-    st.dataframe(styled, hide_index=True, use_container_width=True)
+    disp = gb_df.copy()
+    pct_cols = [c for c in disp.columns if c != "항목" and c not in count_cols]
+    for c in pct_cols:
+        disp[c] = disp[c] * 100
+
+    col_cfg = {}
+    for c in count_cols + pct_cols:
+        fmt = "%d" if c in count_cols else "%.1f%%"
+        if c in bar_cols:
+            vmax = float(disp[c].abs().max() or 1)
+            col_cfg[c] = st.column_config.ProgressColumn(format=fmt, min_value=-vmax, max_value=vmax)
+        else:
+            col_cfg[c] = st.column_config.NumberColumn(format=fmt)
+
+    st.dataframe(disp, hide_index=True, use_container_width=True, column_config=col_cfg)
 
 
 def tab_overview(df, kpi, groupby2):
