@@ -1151,8 +1151,14 @@ def tab_factor_detail(df, factor_detail):
     port_names = df[df["편입"]].set_index("ISIN")["Name"].to_dict()
 
     detail_df = detail_df[detail_df["ISIN"].isin(port_isins)].copy()
+    detail_df = detail_df.drop_duplicates(subset=["ISIN"])
     detail_df["Name"] = detail_df["ISIN"].map(port_names)
     detail_df = detail_df.dropna(subset=["Name"])
+
+    dup_mask = detail_df["Name"].duplicated(keep=False)
+    detail_df.loc[dup_mask, "Name"] = (
+        detail_df.loc[dup_mask, "Name"] + " (" + detail_df.loc[dup_mask, "ISIN"].str[-4:] + ")"
+    )
 
     items = fdata["items"]
     weights = fdata["weights"]
