@@ -763,28 +763,26 @@ def tab_factor(df):
         st.plotly_chart(fig4, use_container_width=True)
 
 
-def tab_sector_country(df):
+def tab_sector_country(df, groupby2):
     st.subheader("섹터 / 국가 구성")
-
-    port_df = df[df["편입"]].copy()
 
     col_l, col_r = st.columns(2)
 
     with col_l:
-        st.markdown("**섹터별 포트 비중 vs BM 비중**")
-        sec_w = (
-            df.groupby("GICS")
-            .agg(Port_W=("최종AW", "sum"), BM_W=("BM_W", "sum"))
-            .reindex([s for s in SECTOR_ORDER if s in df["GICS"].unique()])
+        st.markdown("**섹터별 포트 비중 vs URTH(벤치마크) 비중**")
+        sec = (
+            groupby2["sector"]
+            .set_index("항목")
+            .reindex([s for s in SECTOR_ORDER if s in groupby2["sector"]["항목"].unique()])
             .fillna(0)
             .reset_index()
+            .rename(columns={"항목": "GICS"})
         )
-        sec_w["Over/Under"] = sec_w["Port_W"] - sec_w["BM_W"]
 
         fig = go.Figure()
-        fig.add_trace(go.Bar(name="포트 비중", x=sec_w["GICS"], y=sec_w["Port_W"],
+        fig.add_trace(go.Bar(name="포트 비중", x=sec["GICS"], y=sec["PORT비중"],
                              marker_color="#4C72B0"))
-        fig.add_trace(go.Bar(name="BM 비중", x=sec_w["GICS"], y=sec_w["BM_W"],
+        fig.add_trace(go.Bar(name="URTH 비중", x=sec["GICS"], y=sec["URTH"],
                              marker_color="#aec7e8"))
         fig.update_layout(
             barmode="group",
@@ -796,15 +794,15 @@ def tab_sector_country(df):
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("**Over/Underweight (포트 - BM)**")
-        sec_w_sorted = sec_w.sort_values("Over/Under", ascending=True)
-        colors = ["#d62728" if v < 0 else "#2ca02c" for v in sec_w_sorted["Over/Under"]]
+        st.markdown("**Over/Underweight (Active = 포트 - URTH)**")
+        sec_sorted = sec.sort_values("Active", ascending=True)
+        colors = ["#d62728" if v < 0 else "#2ca02c" for v in sec_sorted["Active"]]
         fig2 = go.Figure(go.Bar(
-            x=sec_w_sorted["Over/Under"],
-            y=sec_w_sorted["GICS"],
+            x=sec_sorted["Active"],
+            y=sec_sorted["GICS"],
             orientation="h",
             marker_color=colors,
-            text=[f"{v*100:+.2f}%" for v in sec_w_sorted["Over/Under"]],
+            text=[f"{v*100:+.2f}%" for v in sec_sorted["Active"]],
             textposition="outside",
         ))
         fig2.update_layout(
@@ -815,19 +813,16 @@ def tab_sector_country(df):
 
     with col_r:
         st.markdown("**국가별 포트 비중**")
-        country_w = (
-            port_df.groupby("Country")["최종AW"].sum()
-            .sort_values(ascending=False)
-            .reset_index()
-        )
-        country_w.columns = ["Country", "비중"]
-        # Top 10 + 기타
-        if len(country_w) > 10:
-            top10 = country_w.head(10)
-            etc = pd.DataFrame([{"Country": "기타", "비중": country_w.iloc[10:]["비중"].sum()}])
-            country_w = pd.concat([top10, etc], ignore_index=True)
+        country = groupby2["country"].sort_values("PORT비중", ascending=False).reset_index(drop=True)
+        if len(country) > 10:
+            country_pie = pd.concat([
+                country.head(10)[["항목", "PORT비중"]],
+                pd.DataFrame([{"항목": "기타", "PORT비중": country.iloc[10:]["PORT비중"].sum()}]),
+            ], ignore_index=True)
+        else:
+            country_pie = country[["항목", "PORT비중"]]
 
-        fig3 = px.pie(country_w, names="Country", values="비중",
+        fig3 = px.pie(country_pie, names="항목", values="PORT비중",
                       hole=0.4,
                       color_discrete_sequence=px.colors.qualitative.Set2)
         fig3.update_traces(textposition="inside", textinfo="percent+label")
@@ -836,10 +831,7 @@ def tab_sector_country(df):
                            legend=dict(orientation="v", x=1.02))
         st.plotly_chart(fig3, use_container_width=True)
 
-        st.markdown("**국가별 상세 비중**")
-        disp = country_w.copy()
-        disp["비중"] = disp["비중"].apply(fmt_pct)
-        st.dataframe(disp, hide_index=True, use_container_width=True, height=340)
+        render_gb_table("국가별 상세 비중", country, [], ["Active", "XActive"])
 
 
 def tab_themes(df, themes):
@@ -1381,7 +1373,7 @@ def main():
             st.code(traceback.format_exc())
     with tabs[2]:
         try:
-            tab_sector_country(df)
+            tab_sector_country(df, groupby2)
         except Exception as e:
             st.error(f"[탭3 에러] {e}")
             st.code(traceback.format_exc())
