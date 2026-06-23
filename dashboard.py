@@ -460,6 +460,45 @@ def load_data():
     return df, kpi, themes, factor_detail, groupby2
 
 
+BRINSON_COLS = [
+    "Name", "ISIN", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B", "CTR_D",
+    "Rtn_P", "Rtn_B", "Rtn_D", "TotAttr", "Alloc", "Selec", "Curr", "Inter",
+    "PxDiff", "Transact", "Ticker", "StartW_P", "StartW_B", "StartW_D",
+    "EndW_P", "EndW_B", "EndW_D",
+]
+
+
+@st.cache_data(ttl=60, show_spinner="브린슨 분석 파일 로딩 중...")
+def load_brinson():
+    path = os.path.join(os.path.dirname(__file__), "03Y51_YTD.xlsx")
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    ws = wb["Worksheet"]
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+
+    total_row = dict(zip(BRINSON_COLS, rows[1]))
+
+    sector_recs, stock_recs = [], []
+    current_sector = None
+    for row in rows[2:]:
+        name, isin = row[0], row[1]
+        if name is None:
+            continue
+        if isin is None:
+            current_sector = name.lstrip("›").strip()
+            rec = dict(zip(BRINSON_COLS, row))
+            rec["GICS"] = current_sector
+            sector_recs.append(rec)
+        else:
+            rec = dict(zip(BRINSON_COLS, row))
+            rec["GICS"] = current_sector
+            stock_recs.append(rec)
+
+    sector_df = pd.DataFrame(sector_recs)
+    stock_df = pd.DataFrame(stock_recs)
+    return total_row, sector_df, stock_df
+
+
 # ─── 라이브 수익률 ────────────────────────────────────────────────────────────
 
 def _fetch_one_ticker(isin: str, ticker: str, session: requests.Session) -> dict:
@@ -735,6 +774,63 @@ def tab_overview(df, kpi, groupby2):
     render_gb_table("테마별 비중", groupby2["theme"], ["XPORT", "PORT", "차이"], bar3)
     render_gb_table("R_TR.GICSIndustryGroup", groupby2["industry_group"], ["XPORT", "PORT", "차이"], bar3)
     render_gb_table("R_TR.CoRPriJaryCountry", groupby2["country"], [], ["Active", "XActive"])
+
+
+def tab_brinson(brinson):
+    total_row, sector_df, stock_df = brinson
+    st.subheader("브린슨 성과 기여분석 (YTD)")
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("포트 수익률", f"{total_row['Rtn_P']:.2f}%")
+    c2.metric("BM 수익률", f"{total_row['Rtn_B']:.2f}%")
+    c3.metric("액티브 수익률", f"{total_row['Rtn_D']:+.2f}%")
+    c4.metric("Tot Attr", f"{total_row['TotAttr']:+.2f}%")
+    c5.metric("Inter", f"{total_row['Inter']:+.2f}%")
+
+    c6, c7, c8, _ = st.columns(4)
+    c6.metric("Alloc (배분효과)", f"{total_row['Alloc']:+.2f}%")
+    c7.metric("Selec (선택효과)", f"{total_row['Selec']:+.2f}%")
+    c8.metric("Curr (환효과)", f"{total_row['Curr']:+.2f}%")
+
+    st.divider()
+
+    st.markdown("**섹터별 기여분석**")
+    sec = sector_df.sort_values("TotAttr", ascending=False)
+    fig = go.Figure()
+    for col, color in [("Alloc", "#4C72B0"), ("Selec", "#DD8452"), ("Curr", "#55A868"), ("Inter", "#C44E52")]:
+        fig.add_trace(go.Bar(name=col, x=sec["GICS"], y=sec[col], marker_color=color))
+    fig.update_layout(
+        barmode="relative", height=380,
+        margin=dict(l=0, r=0, t=10, b=100),
+        xaxis=dict(tickangle=-30), yaxis=dict(ticksuffix="%"),
+        legend=dict(orientation="h", y=1.12),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    sec_disp = sec[["GICS", "AvgW_P", "AvgW_B", "Rtn_P", "Rtn_B",
+                     "Alloc", "Selec", "Curr", "Inter", "TotAttr"]].copy()
+    sec_disp.columns = ["섹터", "포트비중", "BM비중", "포트수익률", "BM수익률",
+                         "Alloc", "Selec", "Curr", "Inter", "Tot Attr"]
+    for c in sec_disp.columns[1:]:
+        sec_disp[c] = sec_disp[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
+    st.dataframe(sec_disp, hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    st.markdown("**종목별 기여 Top 10 / Bottom 10**")
+    col_top, col_bot = st.columns(2)
+    with col_top:
+        st.markdown("**기여 상위 10**")
+        top10 = stock_df.nlargest(10, "TotAttr")[["Name", "GICS", "TotAttr"]].copy()
+        top10.columns = ["종목명", "섹터", "Tot Attr"]
+        top10["Tot Attr"] = top10["Tot Attr"].apply(lambda v: f"{v:+.2f}%")
+        st.dataframe(top10, hide_index=True, use_container_width=True)
+    with col_bot:
+        st.markdown("**기여 하위 10**")
+        bot10 = stock_df.nsmallest(10, "TotAttr")[["Name", "GICS", "TotAttr"]].copy()
+        bot10.columns = ["종목명", "섹터", "Tot Attr"]
+        bot10["Tot Attr"] = bot10["Tot Attr"].apply(lambda v: f"{v:+.2f}%")
+        st.dataframe(bot10, hide_index=True, use_container_width=True)
 
 
 def tab_factor(df):
@@ -1423,9 +1519,16 @@ def main():
         st.error(f"데이터 로드 실패: {e}")
         return
 
+    try:
+        brinson = load_brinson()
+    except Exception as e:
+        brinson = None
+        brinson_error = e
+
     tabs = st.tabs([
         "💹 비중 & 수익률",
         "📋 포트폴리오 개요",
+        "🧮 브린슨 성과분석",
         "📊 팩터 스코어 분석",
         "🗺️ 섹터/국가 구성",
         "🎯 테마 집합 분석",
@@ -1447,34 +1550,43 @@ def main():
             st.error(f"[탭2 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[2]:
-        try:
-            tab_factor(df)
-        except Exception as e:
-            st.error(f"[탭3 에러] {e}")
-            st.code(traceback.format_exc())
+        if brinson is None:
+            st.error(f"[탭3 에러] 03Y51_YTD.xlsx 로드 실패: {brinson_error}")
+        else:
+            try:
+                tab_brinson(brinson)
+            except Exception as e:
+                st.error(f"[탭3 에러] {e}")
+                st.code(traceback.format_exc())
     with tabs[3]:
         try:
-            tab_sector_country(df, groupby2)
+            tab_factor(df)
         except Exception as e:
             st.error(f"[탭4 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[4]:
         try:
-            tab_themes(df, themes)
+            tab_sector_country(df, groupby2)
         except Exception as e:
             st.error(f"[탭5 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[5]:
         try:
-            tab_factor_detail(df, factor_detail)
+            tab_themes(df, themes)
         except Exception as e:
             st.error(f"[탭6 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[6]:
         try:
-            tab_detail(df)
+            tab_factor_detail(df, factor_detail)
         except Exception as e:
             st.error(f"[탭7 에러] {e}")
+            st.code(traceback.format_exc())
+    with tabs[7]:
+        try:
+            tab_detail(df)
+        except Exception as e:
+            st.error(f"[탭8 에러] {e}")
             st.code(traceback.format_exc())
 
 
