@@ -812,32 +812,40 @@ def tab_overview(df, kpi, groupby2):
     render_gb_table("R_TR.CoRPriJaryCountry", groupby2["country"], [], ["Active", "XActive"])
 
 
-def render_brinson_period(brinson):
+def render_brinson_period(brinson, key_prefix="default"):
     total_row, sector_df, stock_df = brinson
 
     sec = sector_df.sort_values("TotAttr", ascending=False)
     stock_cols = ["Name", "GICS", "AvgW_P", "AvgW_B", "Rtn_B", "TotAttr", "Selec"]
     stock_col_names = ["종목명", "섹터", "포트비중", "BM비중", "기간수익률", "초과수익률", "종목선택효과"]
 
-    st.markdown(
-        f"**전체** · 포트비중 {total_row['AvgW_P']:.2f}% · BM비중 {total_row['AvgW_B']:.2f}% · "
-        f"기간수익률 {total_row['Rtn_B']:+.2f}% · 초과수익률 {total_row['TotAttr']:+.2f}% · "
-        f"업종선택효과 {total_row['Alloc']:+.2f}% · 종목선택효과 {total_row['Selec']:+.2f}%"
+    total_as_row = pd.DataFrame([{
+        "GICS": "전체", "AvgW_P": total_row["AvgW_P"], "AvgW_B": total_row["AvgW_B"],
+        "AvgW_D": total_row["AvgW_D"], "CTR_P": total_row["CTR_P"], "CTR_B": total_row["CTR_B"],
+        "Rtn_B": total_row["Rtn_B"], "TotAttr": total_row["TotAttr"],
+        "Alloc": total_row["Alloc"], "Selec": total_row["Selec"],
+    }])
+    sec_with_total = pd.concat(
+        [total_as_row, sec[["GICS", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B",
+                             "Rtn_B", "TotAttr", "Alloc", "Selec"]]],
+        ignore_index=True,
     )
+    sec_with_total.columns = ["섹터", "포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도",
+                               "기간수익률", "초과수익률", "업종선택효과", "종목선택효과"]
+    for c in sec_with_total.columns[1:]:
+        sec_with_total[c] = sec_with_total[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
+    st.dataframe(sec_with_total, hide_index=True, use_container_width=True)
 
-    for _, row in sec.iterrows():
-        label = (
-            f"{row['GICS']}  ·  포트비중 {row['AvgW_P']:.2f}%  ·  BM비중 {row['AvgW_B']:.2f}%  ·  "
-            f"기간수익률 {row['Rtn_B']:+.2f}%  ·  초과수익률 {row['TotAttr']:+.2f}%  ·  "
-            f"업종선택효과 {row['Alloc']:+.2f}%  ·  종목선택효과 {row['Selec']:+.2f}%"
-        )
-        with st.expander(label):
-            sec_stocks = stock_df[stock_df["GICS"] == row["GICS"]][stock_cols].copy()
-            sec_stocks = sec_stocks.sort_values("TotAttr", ascending=False)
-            sec_stocks.columns = stock_col_names
-            for c in stock_col_names[2:]:
-                sec_stocks[c] = sec_stocks[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
-            st.dataframe(sec_stocks, hide_index=True, use_container_width=True)
+    sel_sector = st.selectbox(
+        "업종 선택 → 종목 보기", sec["GICS"].tolist(), key=f"brinson_sector_drill_{key_prefix}"
+    )
+    if sel_sector:
+        sec_stocks = stock_df[stock_df["GICS"] == sel_sector][stock_cols].copy()
+        sec_stocks = sec_stocks.sort_values("TotAttr", ascending=False)
+        sec_stocks.columns = stock_col_names
+        for c in stock_col_names[2:]:
+            sec_stocks[c] = sec_stocks[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
+        st.dataframe(sec_stocks, hide_index=True, use_container_width=True)
 
     st.markdown("**종목별 기여 Top 10 / Bottom 10 (초과수익률 기준)**")
 
@@ -882,11 +890,11 @@ def tab_brinson():
     if mode == "나눠서 보기":
         for label, brinson in loaded.items():
             st.markdown(f"### {label}")
-            render_brinson_period(brinson)
+            render_brinson_period(brinson, key_prefix=label)
             st.divider()
     else:
         st.caption(f"합산 기간: {', '.join(loaded.keys())}")
-        render_brinson_period(combine_brinson_periods(loaded))
+        render_brinson_period(combine_brinson_periods(loaded), key_prefix="combined")
 
 
 def tab_factor(df):
