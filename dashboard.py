@@ -564,6 +564,41 @@ def fetch_stock_news(ticker: str, count: int = 3) -> list:
         return []
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_company_profile(ticker: str) -> dict:
+    try:
+        session = requests.Session()
+        session.headers.update(YAHOO_HEADERS)
+        session.verify = False
+        session.get("https://fc.yahoo.com", timeout=8)
+        crumb = session.get("https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=8).text.strip()
+        r = session.get(
+            f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
+            f"?modules=assetProfile&crumb={crumb}",
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return {}
+        result = r.json().get("quoteSummary", {}).get("result") or []
+        if not result:
+            return {}
+        prof = result[0].get("assetProfile", {})
+        return {"summary": prof.get("longBusinessSummary"), "industry": prof.get("industry")}
+    except Exception:
+        return {}
+
+
+def top_moat_factor(factor_detail, isin):
+    df_c = factor_detail["C"]["df"]
+    row = df_c[df_c["ISIN"] == isin]
+    if row.empty:
+        return None
+    row = row.iloc[0]
+    moat_items = ["무형자산", "네트워크효과", "규모의경제", "비용우위", "전환비용"]
+    vals = {k: row[k] for k in moat_items if pd.notna(row.get(k)) and row[k] > 0}
+    return max(vals, key=vals.get) if vals else None
+
+
 # ─── 포맷 헬퍼 ───────────────────────────────────────────────────────────────
 
 def fmt_pct(v, decimals=1):
@@ -1180,10 +1215,13 @@ def tab_portfolio_returns(df, factor_detail):
         })
         .map(ret_color, subset=ret_cols)
     )
-    st.dataframe(styled, height=580, use_container_width=True)
+    st.markdown(
+        f"<div style='font-size:16px;max-height:580px;overflow-y:auto'>{styled.to_html()}</div>",
+        unsafe_allow_html=True,
+    )
 
     st.markdown("**일간 ±5% 이상 급등/급락 종목**")
-    movers = merged[merged["D_R"].abs() >= 0.05][["Name", "ticker", "D_R"]].copy()
+    movers = merged[merged["D_R"].abs() >= 0.05][["ISIN", "Name", "ticker", "D_R"]].copy()
     movers = movers.sort_values("D_R", key=lambda s: s.abs(), ascending=False)
 
     if movers.empty:
@@ -1197,10 +1235,22 @@ def tab_portfolio_returns(df, factor_detail):
                 f"<span style='color:{color};font-weight:700'>{arrow} {row['D_R']*100:+.2f}%</span>",
                 unsafe_allow_html=True,
             )
-            news_items = fetch_stock_news(row["ticker"]) if isinstance(row["ticker"], str) else []
+
+            moat = top_moat_factor(factor_detail, row["ISIN"])
+            profile = fetch_company_profile(row["ticker"]) if isinstance(row["ticker"], str) else {}
+            summary = (profile.get("summary") or "").split(". ")[0]
+            industry = profile.get("industry")
+            overview_bits = [b for b in [industry, summary] if b]
+            moat_bit = f"주요 모트 요인: {moat}" if moat else "주요 모트 요인: —"
+            if overview_bits:
+                st.caption(f"{' · '.join(overview_bits)} · {moat_bit}")
+            else:
+                st.caption(moat_bit)
+
+            news_items = fetch_stock_news(row["ticker"], count=1) if isinstance(row["ticker"], str) else []
             if news_items:
-                for item in news_items:
-                    st.markdown(f"- [{item['title']}]({item['link']}) · {item['publisher']}")
+                item = news_items[0]
+                st.markdown(f"- [{item['title']}]({item['link']}) · {item['publisher']}")
             else:
                 st.caption("관련 뉴스 없음")
 
