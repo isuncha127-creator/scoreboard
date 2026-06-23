@@ -815,19 +815,6 @@ def tab_overview(df, kpi, groupby2):
 def render_brinson_period(brinson):
     total_row, sector_df, stock_df = brinson
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("포트비중", f"{total_row['AvgW_P']:.2f}%")
-    c2.metric("BM비중", f"{total_row['AvgW_B']:.2f}%")
-    c3.metric("비중차이", f"{total_row['AvgW_D']:+.2f}%")
-    c4.metric("기간수익률", f"{total_row['Rtn_B']:+.2f}%")
-
-    c5, c6, c7, c8, c9 = st.columns(5)
-    c5.metric("포트기여도", f"{total_row['CTR_P']:+.2f}%")
-    c6.metric("BM기여도", f"{total_row['CTR_B']:+.2f}%")
-    c7.metric("초과수익률", f"{total_row['TotAttr']:+.2f}%")
-    c8.metric("업종선택효과", f"{total_row['Alloc']:+.2f}%")
-    c9.metric("종목선택효과", f"{total_row['Selec']:+.2f}%")
-
     st.markdown("**섹터별 기여분석**")
     sec = sector_df.sort_values("TotAttr", ascending=False)
     fig = go.Figure()
@@ -840,6 +827,19 @@ def render_brinson_period(brinson):
         legend=dict(orientation="h", y=1.12),
     )
     st.plotly_chart(fig, use_container_width=True)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("포트비중", f"{total_row['AvgW_P']:.2f}%")
+    c2.metric("BM비중", f"{total_row['AvgW_B']:.2f}%")
+    c3.metric("비중차이", f"{total_row['AvgW_D']:+.2f}%")
+    c4.metric("기간수익률", f"{total_row['Rtn_B']:+.2f}%")
+
+    c5, c6, c7, c8, c9 = st.columns(5)
+    c5.metric("포트기여도", f"{total_row['CTR_P']:+.2f}%")
+    c6.metric("BM기여도", f"{total_row['CTR_B']:+.2f}%")
+    c7.metric("초과수익률", f"{total_row['TotAttr']:+.2f}%")
+    c8.metric("업종선택효과", f"{total_row['Alloc']:+.2f}%")
+    c9.metric("종목선택효과", f"{total_row['Selec']:+.2f}%")
 
     sec_disp = sec[["GICS", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B",
                      "Rtn_B", "TotAttr", "Alloc", "Selec"]].copy()
