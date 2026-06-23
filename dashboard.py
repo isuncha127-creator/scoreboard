@@ -467,10 +467,17 @@ BRINSON_COLS = [
     "EndW_P", "EndW_B", "EndW_D",
 ]
 
+# 기간(파일) 레지스트리. 월별 파일이 추가되면 여기에 항목을 추가하면 된다.
+BRINSON_PERIODS = {
+    "2025-12-30 ~ 2026-06-22": "03Y51_YTD.xlsx",
+}
+
+BRINSON_ADDITIVE_COLS = ["CTR_P", "CTR_B", "CTR_D", "TotAttr", "Alloc", "Selec", "Curr", "Inter"]
+
 
 @st.cache_data(ttl=60, show_spinner="브린슨 분석 파일 로딩 중...")
-def load_brinson():
-    path = os.path.join(os.path.dirname(__file__), "03Y51_YTD.xlsx")
+def load_brinson(filename):
+    path = os.path.join(os.path.dirname(__file__), filename)
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb["Worksheet"]
     rows = list(ws.iter_rows(values_only=True))
@@ -497,6 +504,29 @@ def load_brinson():
     sector_df = pd.DataFrame(sector_recs)
     stock_df = pd.DataFrame(stock_recs)
     return total_row, sector_df, stock_df
+
+
+def combine_brinson_periods(loaded: dict):
+    """여러 기간(파일)의 브린슨 결과를 하나로 합산. 기여도 계열 컬럼은 기간에 걸쳐
+    더해서 합산하고, 비중/수익률은 참고용으로 가장 최근 기간 값을 그대로 보여준다."""
+    items = list(loaded.values())
+    total_rows = [t for t, _, _ in items]
+    sector_dfs = [s for _, s, _ in items]
+    stock_dfs = [k for _, _, k in items]
+
+    combined_total = dict(total_rows[-1])
+    for c in BRINSON_ADDITIVE_COLS:
+        combined_total[c] = sum((t.get(c) or 0) for t in total_rows)
+
+    def combine_df(dfs, key_cols):
+        all_df = pd.concat(dfs, ignore_index=True)
+        agg = all_df.groupby(key_cols, as_index=False)[BRINSON_ADDITIVE_COLS].sum()
+        latest = dfs[-1][key_cols + ["AvgW_P", "AvgW_B", "AvgW_D", "Rtn_B"]]
+        return agg.merge(latest, on=key_cols, how="left")
+
+    combined_sector = combine_df(sector_dfs, ["GICS"])
+    combined_stock = combine_df(stock_dfs, ["ISIN", "Name", "GICS"])
+    return combined_total, combined_sector, combined_stock
 
 
 # ─── 라이브 수익률 ────────────────────────────────────────────────────────────
@@ -776,29 +806,21 @@ def tab_overview(df, kpi, groupby2):
     render_gb_table("R_TR.CoRPriJaryCountry", groupby2["country"], [], ["Active", "XActive"])
 
 
-def tab_brinson(brinson):
+def render_brinson_period(brinson):
     total_row, sector_df, stock_df = brinson
-    st.subheader("브린슨 성과 기여분석 (YTD)")
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("포트 수익률", f"{total_row['Rtn_P']:.2f}%")
-    c2.metric("BM 수익률", f"{total_row['Rtn_B']:.2f}%")
-    c3.metric("액티브 수익률", f"{total_row['Rtn_D']:+.2f}%")
-    c4.metric("Tot Attr", f"{total_row['TotAttr']:+.2f}%")
-    c5.metric("Inter", f"{total_row['Inter']:+.2f}%")
-
-    c6, c7, c8, _ = st.columns(4)
-    c6.metric("Alloc (배분효과)", f"{total_row['Alloc']:+.2f}%")
-    c7.metric("Selec (선택효과)", f"{total_row['Selec']:+.2f}%")
-    c8.metric("Curr (환효과)", f"{total_row['Curr']:+.2f}%")
-
-    st.divider()
+    c1.metric("포트기여도", f"{total_row['CTR_P']:+.2f}%")
+    c2.metric("BM기여도", f"{total_row['CTR_B']:+.2f}%")
+    c3.metric("초과수익률", f"{total_row['TotAttr']:+.2f}%")
+    c4.metric("업종선택효과", f"{total_row['Alloc']:+.2f}%")
+    c5.metric("종목선택효과", f"{total_row['Selec']:+.2f}%")
 
     st.markdown("**섹터별 기여분석**")
     sec = sector_df.sort_values("TotAttr", ascending=False)
     fig = go.Figure()
-    for col, color in [("Alloc", "#4C72B0"), ("Selec", "#DD8452"), ("Curr", "#55A868"), ("Inter", "#C44E52")]:
-        fig.add_trace(go.Bar(name=col, x=sec["GICS"], y=sec[col], marker_color=color))
+    for col, label, color in [("Alloc", "업종선택효과", "#4C72B0"), ("Selec", "종목선택효과", "#DD8452")]:
+        fig.add_trace(go.Bar(name=label, x=sec["GICS"], y=sec[col], marker_color=color))
     fig.update_layout(
         barmode="relative", height=380,
         margin=dict(l=0, r=0, t=10, b=100),
@@ -807,30 +829,64 @@ def tab_brinson(brinson):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    sec_disp = sec[["GICS", "AvgW_P", "AvgW_B", "Rtn_P", "Rtn_B",
-                     "Alloc", "Selec", "Curr", "Inter", "TotAttr"]].copy()
-    sec_disp.columns = ["섹터", "포트비중", "BM비중", "포트수익률", "BM수익률",
-                         "Alloc", "Selec", "Curr", "Inter", "Tot Attr"]
+    sec_disp = sec[["GICS", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B",
+                     "Rtn_B", "TotAttr", "Alloc", "Selec"]].copy()
+    sec_disp.columns = ["섹터", "포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도",
+                         "기간수익률", "초과수익률", "업종선택효과", "종목선택효과"]
     for c in sec_disp.columns[1:]:
         sec_disp[c] = sec_disp[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
     st.dataframe(sec_disp, hide_index=True, use_container_width=True)
 
-    st.divider()
+    st.markdown("**종목별 기여 Top 10 / Bottom 10 (초과수익률 기준)**")
+    stock_cols = ["Name", "GICS", "AvgW_P", "AvgW_B", "Rtn_B", "TotAttr", "Selec"]
+    stock_col_names = ["종목명", "섹터", "포트비중", "BM비중", "기간수익률", "초과수익률", "종목선택효과"]
 
-    st.markdown("**종목별 기여 Top 10 / Bottom 10**")
     col_top, col_bot = st.columns(2)
     with col_top:
         st.markdown("**기여 상위 10**")
-        top10 = stock_df.nlargest(10, "TotAttr")[["Name", "GICS", "TotAttr"]].copy()
-        top10.columns = ["종목명", "섹터", "Tot Attr"]
-        top10["Tot Attr"] = top10["Tot Attr"].apply(lambda v: f"{v:+.2f}%")
+        top10 = stock_df.nlargest(10, "TotAttr")[stock_cols].copy()
+        top10.columns = stock_col_names
+        for c in stock_col_names[2:]:
+            top10[c] = top10[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
         st.dataframe(top10, hide_index=True, use_container_width=True)
     with col_bot:
         st.markdown("**기여 하위 10**")
-        bot10 = stock_df.nsmallest(10, "TotAttr")[["Name", "GICS", "TotAttr"]].copy()
-        bot10.columns = ["종목명", "섹터", "Tot Attr"]
-        bot10["Tot Attr"] = bot10["Tot Attr"].apply(lambda v: f"{v:+.2f}%")
+        bot10 = stock_df.nsmallest(10, "TotAttr")[stock_cols].copy()
+        bot10.columns = stock_col_names
+        for c in stock_col_names[2:]:
+            bot10[c] = bot10[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
         st.dataframe(bot10, hide_index=True, use_container_width=True)
+
+
+def tab_brinson():
+    st.subheader("브린슨 성과 기여분석")
+
+    period_labels = list(BRINSON_PERIODS.keys())
+    selected = st.multiselect("기간 선택", period_labels, default=period_labels, key="brinson_periods")
+    mode = st.radio("보기 방식", ["합쳐서 보기", "나눠서 보기"], horizontal=True, key="brinson_mode")
+
+    if not selected:
+        st.info("기간을 선택해주세요.")
+        return
+
+    loaded = {}
+    for label in selected:
+        try:
+            loaded[label] = load_brinson(BRINSON_PERIODS[label])
+        except Exception as e:
+            st.error(f"{label} 파일 로드 실패: {e}")
+
+    if not loaded:
+        return
+
+    if mode == "나눠서 보기":
+        for label, brinson in loaded.items():
+            st.markdown(f"### {label}")
+            render_brinson_period(brinson)
+            st.divider()
+    else:
+        st.caption(f"합산 기간: {', '.join(loaded.keys())}")
+        render_brinson_period(combine_brinson_periods(loaded))
 
 
 def tab_factor(df):
@@ -1519,12 +1575,6 @@ def main():
         st.error(f"데이터 로드 실패: {e}")
         return
 
-    try:
-        brinson = load_brinson()
-    except Exception as e:
-        brinson = None
-        brinson_error = e
-
     tabs = st.tabs([
         "💹 비중 & 수익률",
         "📋 포트폴리오 개요",
@@ -1550,14 +1600,11 @@ def main():
             st.error(f"[탭2 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[2]:
-        if brinson is None:
-            st.error(f"[탭3 에러] 03Y51_YTD.xlsx 로드 실패: {brinson_error}")
-        else:
-            try:
-                tab_brinson(brinson)
-            except Exception as e:
-                st.error(f"[탭3 에러] {e}")
-                st.code(traceback.format_exc())
+        try:
+            tab_brinson()
+        except Exception as e:
+            st.error(f"[탭3 에러] {e}")
+            st.code(traceback.format_exc())
     with tabs[3]:
         try:
             tab_factor(df)
