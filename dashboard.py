@@ -1083,12 +1083,21 @@ def tab_portfolio_returns(df, factor_detail):
     merged["AWx1M"] = merged["최종AW"] * merged["1M_R"]
     merged["AWxYTD"] = merged["최종AW"] * merged["YTD_R"]
 
+    def small_metric(col, label, v):
+        color = "#2ca02c" if v >= 0 else "#d62728"
+        arrow = "▲" if v >= 0 else "▼"
+        col.markdown(
+            f"<div style='font-size:13px;color:#888'>{label}</div>"
+            f"<div style='font-size:14px;font-weight:600;color:{color}'>{arrow} {v*100:+.2f}%</div>",
+            unsafe_allow_html=True,
+        )
+
     periods = ["일간", "1W", "1M", "YTD"]
     port_vals = [merged["AWxD"].sum(), merged["AWx1W"].sum(), merged["AWx1M"].sum(), merged["AWxYTD"].sum()]
 
     c1, c2, c3, c4 = st.columns(4)
     for col, label, v in zip([c1, c2, c3, c4], periods, port_vals):
-        col.metric(f"AW×{label} 합계", f"{v*100:+.2f}%", delta=f"{v*100:+.2f}%")
+        small_metric(col, f"AW×{label} 합계", v)
 
     # ── BM(URTH) 대비 상대수익률 ──
     bm_live = fetch_live_returns((("US4642863926", "URTH"),))
@@ -1098,7 +1107,7 @@ def tab_portfolio_returns(df, factor_detail):
 
     r1, r2, r3, r4 = st.columns(4)
     for col, label, v in zip([r1, r2, r3, r4], periods, rel_vals):
-        col.metric(f"상대수익률({label})", f"{v*100:+.2f}%", delta=f"{v*100:+.2f}%")
+        small_metric(col, f"상대수익률({label})", v)
     st.caption("BM: iShares MSCI World ETF (URTH, US4642863926)")
 
     st.divider()
