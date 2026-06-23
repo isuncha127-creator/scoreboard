@@ -1017,7 +1017,18 @@ def tab_portfolio_returns(df, factor_detail):
     st.subheader("편입 종목 비중 & 수익률")
 
     port_df = df[df["편입"]].copy()
-    ticker_map = factor_detail.get("ticker_map", {})
+
+    extra_holdings = pd.DataFrame([
+        {"ISIN": "US81369Y1001", "Name": "Materials Select Sector SPDR Fund (XLB)",
+         "GICS": "Materials", "Country": "United States", "최종포트": 0.01, "최종AW": 0.01},
+        {"ISIN": "US81369Y5069", "Name": "Energy Select Sector SPDR Fund (XLE)",
+         "GICS": "Energy", "Country": "United States", "최종포트": 0.01, "최종AW": 0.01},
+    ])
+    port_df = pd.concat([port_df, extra_holdings], ignore_index=True)
+
+    ticker_map = dict(factor_detail.get("ticker_map", {}))
+    ticker_map["US81369Y1001"] = "XLB"
+    ticker_map["US81369Y5069"] = "XLE"
 
     # 편입 종목 중 ticker 있는 것만 fetch
     port_isins = set(port_df["ISIN"].tolist())
@@ -1058,6 +1069,7 @@ def tab_portfolio_returns(df, factor_detail):
 
     # 수익률이 없으면 Traditional Q 시트 값으로 fallback
     df_q = factor_detail["Q"]["df"][["ISIN", "현재가", "YTD_R", "1M_R", "1W_R"]].copy()
+    df_q = df_q.drop_duplicates(subset=["ISIN"])
     df_q = df_q.rename(columns={"현재가": "static_price", "YTD_R": "s_YTD", "1M_R": "s_1M", "1W_R": "s_1W"})
     merged = merged.merge(df_q, on="ISIN", how="left")
 
@@ -1092,95 +1104,81 @@ def tab_portfolio_returns(df, factor_detail):
 
     st.divider()
 
-    col_l, col_r = st.columns([1.7, 1])
+    sort_by = st.selectbox(
+        "정렬 기준",
+        ["포트 비중 내림차순", "일간 수익률", "1주 수익률", "1M 수익률", "YTD 수익률"],
+        key="pr_sort",
+    )
+    sort_map = {
+        "포트 비중 내림차순": ("최종포트", False),
+        "일간 수익률":       ("D_R",    False),
+        "1주 수익률":        ("1W_R",   False),
+        "1M 수익률":         ("1M_R",   False),
+        "YTD 수익률":        ("YTD_R",  False),
+    }
+    sort_col, sort_asc = sort_map[sort_by]
 
-    with col_l:
-        sort_by = st.selectbox(
-            "정렬 기준",
-            ["포트 비중 내림차순", "일간 수익률", "1주 수익률", "1M 수익률", "YTD 수익률"],
-            key="pr_sort",
-        )
-        sort_map = {
-            "포트 비중 내림차순": ("최종포트", False),
-            "일간 수익률":       ("D_R",    False),
-            "1주 수익률":        ("1W_R",   False),
-            "1M 수익률":         ("1M_R",   False),
-            "YTD 수익률":        ("YTD_R",  False),
-        }
-        sort_col, sort_asc = sort_map[sort_by]
+    disp = merged[["Name", "GICS", "Country", "ticker", "최종포트", "최종AW",
+                    "live_price", "D_R", "1W_R", "1M_R", "YTD_R"]].copy()
+    disp = disp.sort_values(sort_col, ascending=sort_asc, na_position="last").reset_index(drop=True)
+    disp.index += 1
+    disp.columns = ["종목명", "섹터", "국가", "티커", "포트비중", "AW", "현재가", "일간", "1W", "1M", "YTD"]
 
-        disp = merged[["Name", "GICS", "Country", "ticker", "최종포트", "최종AW",
-                        "live_price", "D_R", "1W_R", "1M_R", "YTD_R"]].copy()
-        disp = disp.sort_values(sort_col, ascending=sort_asc, na_position="last").reset_index(drop=True)
-        disp.index += 1
-        disp.columns = ["종목명", "섹터", "국가", "티커", "포트비중", "AW", "현재가", "일간", "1W", "1M", "YTD"]
+    # ret_color는 숫자값에 적용 (format 전에), NaN·비숫자 안전 처리
+    def ret_color(v):
+        if not isinstance(v, (int, float)) or pd.isna(v):
+            return ""
+        return "color:#2ca02c" if v > 0 else "color:#d62728" if v < 0 else ""
 
-        # ret_color는 숫자값에 적용 (format 전에), NaN·비숫자 안전 처리
-        def ret_color(v):
-            if not isinstance(v, (int, float)) or pd.isna(v):
-                return ""
-            return "color:#2ca02c" if v > 0 else "color:#d62728" if v < 0 else ""
+    def _fmt_ret(v):
+        return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v*100:+.2f}%"
 
-        def _fmt_ret(v):
-            return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v*100:+.2f}%"
+    def _fmt_w(v):
+        return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v*100:.2f}%"
 
-        def _fmt_w(v):
-            return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v*100:.2f}%"
+    def _fmt_price(v):
+        return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v:,.2f}"
 
-        def _fmt_price(v):
-            return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v:,.2f}"
+    styled = (
+        disp.style
+        .format({
+            "포트비중": _fmt_w,
+            "AW": _fmt_w,
+            "현재가": _fmt_price,
+            "일간": _fmt_ret,
+            "1W": _fmt_ret,
+            "1M": _fmt_ret,
+            "YTD": _fmt_ret,
+        })
+        .map(ret_color, subset=["일간", "1W", "1M", "YTD"])
+    )
+    st.dataframe(styled, height=580, use_container_width=True)
 
-        styled = (
-            disp.style
-            .format({
-                "포트비중": _fmt_w,
-                "AW": _fmt_w,
-                "현재가": _fmt_price,
-                "일간": _fmt_ret,
-                "1W": _fmt_ret,
-                "1M": _fmt_ret,
-                "YTD": _fmt_ret,
-            })
-            .map(ret_color, subset=["일간", "1W", "1M", "YTD"])
-        )
-        st.dataframe(styled, height=580, use_container_width=True)
-
-    with col_r:
-        st.markdown("**비중 Top 20**")
-        top20 = merged.nlargest(20, "최종포트")[["Name", "최종포트", "YTD_R"]].copy()
-        top20["Name"] = top20["Name"].apply(lambda x: x[:22] if isinstance(x, str) else x)
-        colors = [
-            "#2ca02c" if (pd.notna(v) and v > 0) else "#d62728" if (pd.notna(v) and v < 0) else "#aec7e8"
-            for v in top20["YTD_R"]
-        ]
-        fig = go.Figure(go.Bar(
-            x=top20["최종포트"],
-            y=top20["Name"],
-            orientation="h",
-            marker_color=colors,
-            text=[
-                f"{fmt_pct(w,2)} / YTD {fmt_pct(r,1)}" if pd.notna(r) else fmt_pct(w, 2)
-                for w, r in zip(top20["최종포트"], top20["YTD_R"])
-            ],
-            textposition="outside",
-        ))
-        fig.update_layout(
-            margin=dict(l=0, r=90, t=10, b=10),
-            height=540,
-            xaxis=dict(tickformat=".1%"),
-            yaxis=dict(autorange="reversed"),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("**YTD 수익률 분포**")
-        fig2 = px.histogram(
-            merged, x="YTD_R", nbins=20,
-            color_discrete_sequence=["#4C72B0"],
-            labels={"YTD_R": "YTD 수익률"},
-        )
-        fig2.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=200,
-                           xaxis=dict(tickformat="+.0%"))
-        st.plotly_chart(fig2, use_container_width=True)
+    st.markdown("**비중 Top 20**")
+    top20 = merged.nlargest(20, "최종포트")[["Name", "최종포트", "YTD_R"]].copy()
+    top20["Name"] = top20["Name"].apply(lambda x: x[:22] if isinstance(x, str) else x)
+    colors = [
+        "#2ca02c" if (pd.notna(v) and v > 0) else "#d62728" if (pd.notna(v) and v < 0) else "#aec7e8"
+        for v in top20["YTD_R"]
+    ]
+    fig = go.Figure(go.Bar(
+        x=top20["최종포트"],
+        y=top20["Name"],
+        orientation="h",
+        marker_color=colors,
+        text=[
+            f"{fmt_pct(w,2)} / YTD {fmt_pct(r,1)}" if pd.notna(r) else fmt_pct(w, 2)
+            for w, r in zip(top20["최종포트"], top20["YTD_R"])
+        ],
+        textposition="outside",
+    ))
+    fig.update_layout(
+        margin=dict(l=0, r=90, t=10, b=10),
+        height=540,
+        xaxis=dict(tickformat=".1%"),
+        yaxis=dict(autorange="reversed"),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
     # 데이터 소스 및 에러 리포트
     errors = [(r.get("ticker", "—"), r.get("error")) for r in live.values() if r.get("error")]
