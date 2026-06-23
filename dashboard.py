@@ -1083,12 +1083,13 @@ def tab_portfolio_returns(df, factor_detail):
     merged["AWx1M"] = merged["최종AW"] * merged["1M_R"]
     merged["AWxYTD"] = merged["최종AW"] * merged["YTD_R"]
 
-    def small_metric(col, label, v):
+    def small_metric(col, label, v, bold=False):
         color = "#2ca02c" if v >= 0 else "#d62728"
         arrow = "▲" if v >= 0 else "▼"
+        weight = 800 if bold else 600
         col.markdown(
             f"<div style='font-size:13px;color:#888'>{label}</div>"
-            f"<div style='font-size:14px;font-weight:600;color:{color}'>{arrow} {v*100:+.2f}%</div>",
+            f"<div style='font-size:14px;font-weight:{weight};color:{color}'>{arrow} {v*100:+.2f}%</div>",
             unsafe_allow_html=True,
         )
 
@@ -1107,7 +1108,7 @@ def tab_portfolio_returns(df, factor_detail):
 
     r1, r2, r3, r4 = st.columns(4)
     for col, label, v in zip([r1, r2, r3, r4], periods, rel_vals):
-        small_metric(col, f"상대수익률({label})", v)
+        small_metric(col, f"상대수익률({label})", v, bold=True)
     st.caption("BM: iShares MSCI World ETF (URTH, US4642863926)")
 
     st.divider()
