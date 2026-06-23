@@ -1349,49 +1349,49 @@ def main():
         return
 
     tabs = st.tabs([
+        "💹 비중 & 수익률",
         "📋 포트폴리오 개요",
         "📊 팩터 스코어 분석",
         "🗺️ 섹터/국가 구성",
         "🎯 테마 집합 분석",
         "🔬 팩터 세부 분석",
-        "💹 비중 & 수익률",
         "🔍 종목 상세 검색",
     ])
 
     import traceback
     with tabs[0]:
         try:
-            tab_overview(df, kpi, groupby2)
+            tab_portfolio_returns(df, factor_detail)
         except Exception as e:
             st.error(f"[탭1 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[1]:
         try:
-            tab_factor(df)
+            tab_overview(df, kpi, groupby2)
         except Exception as e:
             st.error(f"[탭2 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[2]:
         try:
-            tab_sector_country(df, groupby2)
+            tab_factor(df)
         except Exception as e:
             st.error(f"[탭3 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[3]:
         try:
-            tab_themes(df, themes)
+            tab_sector_country(df, groupby2)
         except Exception as e:
             st.error(f"[탭4 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[4]:
         try:
-            tab_factor_detail(df, factor_detail)
+            tab_themes(df, themes)
         except Exception as e:
             st.error(f"[탭5 에러] {e}")
             st.code(traceback.format_exc())
     with tabs[5]:
         try:
-            tab_portfolio_returns(df, factor_detail)
+            tab_factor_detail(df, factor_detail)
         except Exception as e:
             st.error(f"[탭6 에러] {e}")
             st.code(traceback.format_exc())
