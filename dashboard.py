@@ -1217,8 +1217,9 @@ def tab_portfolio_returns(df, factor_detail):
         })
         .map(ret_color, subset=ret_cols)
     )
+    styled = styled.set_table_attributes("style='width:100%'")
     st.markdown(
-        f"<div style='font-size:16px;max-height:580px;overflow-y:auto'>{styled.to_html()}</div>",
+        f"<div style='font-size:16px;max-height:580px;overflow-y:auto;width:100%'>{styled.to_html()}</div>",
         unsafe_allow_html=True,
     )
 
