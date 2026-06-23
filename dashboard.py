@@ -828,26 +828,22 @@ def render_brinson_period(brinson):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("포트비중", f"{total_row['AvgW_P']:.2f}%")
-    c2.metric("BM비중", f"{total_row['AvgW_B']:.2f}%")
-    c3.metric("비중차이", f"{total_row['AvgW_D']:+.2f}%")
-    c4.metric("기간수익률", f"{total_row['Rtn_B']:+.2f}%")
-
-    c5, c6, c7, c8, c9 = st.columns(5)
-    c5.metric("포트기여도", f"{total_row['CTR_P']:+.2f}%")
-    c6.metric("BM기여도", f"{total_row['CTR_B']:+.2f}%")
-    c7.metric("초과수익률", f"{total_row['TotAttr']:+.2f}%")
-    c8.metric("업종선택효과", f"{total_row['Alloc']:+.2f}%")
-    c9.metric("종목선택효과", f"{total_row['Selec']:+.2f}%")
-
-    sec_disp = sec[["GICS", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B",
-                     "Rtn_B", "TotAttr", "Alloc", "Selec"]].copy()
-    sec_disp.columns = ["섹터", "포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도",
-                         "기간수익률", "초과수익률", "업종선택효과", "종목선택효과"]
-    for c in sec_disp.columns[1:]:
-        sec_disp[c] = sec_disp[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
-    st.dataframe(sec_disp, hide_index=True, use_container_width=True)
+    total_as_row = pd.DataFrame([{
+        "GICS": "전체", "AvgW_P": total_row["AvgW_P"], "AvgW_B": total_row["AvgW_B"],
+        "AvgW_D": total_row["AvgW_D"], "CTR_P": total_row["CTR_P"], "CTR_B": total_row["CTR_B"],
+        "Rtn_B": total_row["Rtn_B"], "TotAttr": total_row["TotAttr"],
+        "Alloc": total_row["Alloc"], "Selec": total_row["Selec"],
+    }])
+    sec_with_total = pd.concat(
+        [total_as_row, sec[["GICS", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B",
+                             "Rtn_B", "TotAttr", "Alloc", "Selec"]]],
+        ignore_index=True,
+    )
+    sec_with_total.columns = ["섹터", "포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도",
+                               "기간수익률", "초과수익률", "업종선택효과", "종목선택효과"]
+    for c in sec_with_total.columns[1:]:
+        sec_with_total[c] = sec_with_total[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
+    st.dataframe(sec_with_total, hide_index=True, use_container_width=True)
 
     st.markdown("**종목별 기여 Top 10 / Bottom 10 (초과수익률 기준)**")
     stock_cols = ["Name", "GICS", "AvgW_P", "AvgW_B", "Rtn_B", "TotAttr", "Selec"]
