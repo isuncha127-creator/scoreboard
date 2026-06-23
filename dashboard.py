@@ -22,6 +22,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+st.markdown("<style>html { font-size: 18px; }</style>", unsafe_allow_html=True)
+
 FILE_PATH = os.path.join(os.path.dirname(__file__), "03Y51 운용파일_20260602(6월)_mk.xlsx")
 
 FACTOR_COLORS = {
