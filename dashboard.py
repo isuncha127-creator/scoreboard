@@ -1088,8 +1088,8 @@ def tab_portfolio_returns(df, factor_detail):
         arrow = "▲" if v >= 0 else "▼"
         weight = 800 if bold else 600
         col.markdown(
-            f"<div style='font-size:13px;color:#888'>{label}</div>"
-            f"<div style='font-size:14px;font-weight:{weight};color:{color}'>{arrow} {v*100:+.2f}%</div>",
+            f"<div style='font-size:14px;color:#888'>{label}</div>"
+            f"<div style='font-size:16px;font-weight:{weight};color:{color}'>{arrow} {v*100:+.2f}%</div>",
             unsafe_allow_html=True,
         )
 
@@ -1113,13 +1113,18 @@ def tab_portfolio_returns(df, factor_detail):
 
     st.divider()
 
-    sort_by = st.selectbox(
-        "정렬 기준",
-        ["포트 비중 내림차순", "일간 수익률", "1주 수익률", "1M 수익률", "YTD 수익률"],
-        key="pr_sort",
-    )
+    col_sort, col_sector = st.columns(2)
+    with col_sort:
+        sort_by = st.selectbox(
+            "정렬 기준",
+            ["일간 수익률", "1주 수익률", "1M 수익률", "YTD 수익률"],
+            key="pr_sort",
+        )
+    with col_sector:
+        sector_opt = ["전체"] + sorted([s for s in merged["GICS"].dropna().unique() if isinstance(s, str)])
+        sel_sector = st.selectbox("섹터 필터", sector_opt, key="pr_sector")
+
     sort_map = {
-        "포트 비중 내림차순": ("최종포트", False),
         "일간 수익률":       ("D_R",    False),
         "1주 수익률":        ("1W_R",   False),
         "1M 수익률":         ("1M_R",   False),
@@ -1127,8 +1132,10 @@ def tab_portfolio_returns(df, factor_detail):
     }
     sort_col, sort_asc = sort_map[sort_by]
 
-    disp = merged[["Name", "GICS", "ticker", "최종포트", "최종AW", "live_price",
-                    "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R"]].copy()
+    filtered = merged if sel_sector == "전체" else merged[merged["GICS"] == sel_sector]
+
+    disp = filtered[["Name", "GICS", "ticker", "최종포트", "최종AW", "live_price",
+                      "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R"]].copy()
     disp = disp.sort_values(sort_col, ascending=sort_asc, na_position="last").reset_index(drop=True)
     disp.index += 1
     disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가",
