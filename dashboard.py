@@ -1089,6 +1089,16 @@ def tab_portfolio_returns(df, factor_detail):
     c3.metric("AW×1M 합계", f"{merged['AWx1M'].sum()*100:+.2f}%")
     c4.metric("AW×YTD 합계", f"{merged['AWxYTD'].sum()*100:+.2f}%")
 
+    # ── BM(URTH) 대비 상대수익률 ──
+    bm_live = fetch_live_returns((("US4642863926", "URTH"),))
+    bm_rec = bm_live.get("US4642863926", {})
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("상대수익률(일간)", f"{(merged['AWxD'].sum() - (bm_rec.get('D') or 0))*100:+.2f}%")
+    r2.metric("상대수익률(1W)", f"{(merged['AWx1W'].sum() - (bm_rec.get('1W') or 0))*100:+.2f}%")
+    r3.metric("상대수익률(1M)", f"{(merged['AWx1M'].sum() - (bm_rec.get('1M') or 0))*100:+.2f}%")
+    r4.metric("상대수익률(YTD)", f"{(merged['AWxYTD'].sum() - (bm_rec.get('YTD') or 0))*100:+.2f}%")
+    st.caption("BM: iShares MSCI World ETF (URTH, US4642863926)")
+
     st.divider()
 
     sort_by = st.selectbox(
