@@ -543,6 +543,27 @@ def fetch_live_returns(ticker_tuples: tuple) -> dict:
     return result
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_stock_news(ticker: str, count: int = 3) -> list:
+    try:
+        session = requests.Session()
+        session.headers.update(YAHOO_HEADERS)
+        session.verify = False
+        r = session.get(
+            f"https://query1.finance.yahoo.com/v1/finance/search?q={ticker}&newsCount={count}&quotesCount=0",
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        return [
+            {"title": n.get("title"), "link": n.get("link"), "publisher": n.get("publisher")}
+            for n in data.get("news", [])[:count]
+        ]
+    except Exception:
+        return []
+
+
 # ─── 포맷 헬퍼 ───────────────────────────────────────────────────────────────
 
 def fmt_pct(v, decimals=1):
@@ -1161,31 +1182,27 @@ def tab_portfolio_returns(df, factor_detail):
     )
     st.dataframe(styled, height=580, use_container_width=True)
 
-    st.markdown("**비중 Top 20**")
-    top20 = merged.nlargest(20, "최종포트")[["Name", "최종포트", "YTD_R"]].copy()
-    top20["Name"] = top20["Name"].apply(lambda x: x[:22] if isinstance(x, str) else x)
-    colors = [
-        "#2ca02c" if (pd.notna(v) and v > 0) else "#d62728" if (pd.notna(v) and v < 0) else "#aec7e8"
-        for v in top20["YTD_R"]
-    ]
-    fig = go.Figure(go.Bar(
-        x=top20["최종포트"],
-        y=top20["Name"],
-        orientation="h",
-        marker_color=colors,
-        text=[
-            f"{fmt_pct(w,2)} / YTD {fmt_pct(r,1)}" if pd.notna(r) else fmt_pct(w, 2)
-            for w, r in zip(top20["최종포트"], top20["YTD_R"])
-        ],
-        textposition="outside",
-    ))
-    fig.update_layout(
-        margin=dict(l=0, r=90, t=10, b=10),
-        height=540,
-        xaxis=dict(tickformat=".1%"),
-        yaxis=dict(autorange="reversed"),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    st.markdown("**일간 ±5% 이상 급등/급락 종목**")
+    movers = merged[merged["D_R"].abs() >= 0.05][["Name", "ticker", "D_R"]].copy()
+    movers = movers.sort_values("D_R", key=lambda s: s.abs(), ascending=False)
+
+    if movers.empty:
+        st.caption("오늘 ±5% 이상 변동한 종목 없음")
+    else:
+        for _, row in movers.iterrows():
+            color = "#2ca02c" if row["D_R"] > 0 else "#d62728"
+            arrow = "▲" if row["D_R"] > 0 else "▼"
+            st.markdown(
+                f"**{row['Name']}** ({row['ticker']}) "
+                f"<span style='color:{color};font-weight:700'>{arrow} {row['D_R']*100:+.2f}%</span>",
+                unsafe_allow_html=True,
+            )
+            news_items = fetch_stock_news(row["ticker"]) if isinstance(row["ticker"], str) else []
+            if news_items:
+                for item in news_items:
+                    st.markdown(f"- [{item['title']}]({item['link']}) · {item['publisher']}")
+            else:
+                st.caption("관련 뉴스 없음")
 
     # 데이터 소스 및 에러 리포트
     errors = [(r.get("ticker", "—"), r.get("error")) for r in live.values() if r.get("error")]
