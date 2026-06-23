@@ -1092,12 +1092,38 @@ def tab_portfolio_returns(df, factor_detail):
     # ── BM(URTH) 대비 상대수익률 ──
     bm_live = fetch_live_returns((("US4642863926", "URTH"),))
     bm_rec = bm_live.get("US4642863926", {})
+    periods = ["일간", "1W", "1M", "YTD"]
+    port_vals = [merged["AWxD"].sum(), merged["AWx1W"].sum(), merged["AWx1M"].sum(), merged["AWxYTD"].sum()]
+    bm_vals = [bm_rec.get("D") or 0, bm_rec.get("1W") or 0, bm_rec.get("1M") or 0, bm_rec.get("YTD") or 0]
+    rel_vals = [p - b for p, b in zip(port_vals, bm_vals)]
+
     r1, r2, r3, r4 = st.columns(4)
-    r1.metric("상대수익률(일간)", f"{(merged['AWxD'].sum() - (bm_rec.get('D') or 0))*100:+.2f}%")
-    r2.metric("상대수익률(1W)", f"{(merged['AWx1W'].sum() - (bm_rec.get('1W') or 0))*100:+.2f}%")
-    r3.metric("상대수익률(1M)", f"{(merged['AWx1M'].sum() - (bm_rec.get('1M') or 0))*100:+.2f}%")
-    r4.metric("상대수익률(YTD)", f"{(merged['AWxYTD'].sum() - (bm_rec.get('YTD') or 0))*100:+.2f}%")
+    for col, label, v in zip([r1, r2, r3, r4], periods, rel_vals):
+        col.metric(f"상대수익률({label})", f"{v*100:+.2f}%")
     st.caption("BM: iShares MSCI World ETF (URTH, US4642863926)")
+
+    col_cmp, col_rel = st.columns(2)
+    with col_cmp:
+        fig_cmp = go.Figure()
+        fig_cmp.add_trace(go.Bar(name="포트폴리오", x=periods, y=port_vals, marker_color="#4C72B0"))
+        fig_cmp.add_trace(go.Bar(name="URTH(BM)", x=periods, y=bm_vals, marker_color="#aec7e8"))
+        fig_cmp.update_layout(
+            barmode="group", yaxis=dict(tickformat="+.1%"), height=300,
+            margin=dict(l=0, r=0, t=10, b=10), legend=dict(orientation="h", y=1.15),
+        )
+        st.plotly_chart(fig_cmp, use_container_width=True)
+
+    with col_rel:
+        colors = ["#2ca02c" if v >= 0 else "#d62728" for v in rel_vals]
+        fig_rel = go.Figure(go.Bar(
+            x=periods, y=rel_vals, marker_color=colors,
+            text=[f"{v*100:+.2f}%" for v in rel_vals], textposition="outside",
+        ))
+        fig_rel.update_layout(
+            yaxis=dict(tickformat="+.1%"), height=300,
+            margin=dict(l=0, r=0, t=10, b=10),
+        )
+        st.plotly_chart(fig_rel, use_container_width=True)
 
     st.divider()
 
