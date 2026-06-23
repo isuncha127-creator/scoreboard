@@ -819,33 +819,32 @@ def render_brinson_period(brinson, key_prefix="default"):
     stock_cols = ["Name", "GICS", "AvgW_P", "AvgW_B", "Rtn_B", "TotAttr", "Selec"]
     stock_col_names = ["종목명", "섹터", "포트비중", "BM비중", "기간수익률", "초과수익률", "종목선택효과"]
 
-    st.markdown(
-        "<div style='background:#4C72B01a;border-left:4px solid #4C72B0;border-radius:6px;"
-        "padding:8px 14px;margin-bottom:8px;font-size:14px'>"
-        f"<b>전체</b> &nbsp;·&nbsp; 포트비중 {total_row['AvgW_P']:.2f}% "
-        f"&nbsp;·&nbsp; BM비중 {total_row['AvgW_B']:.2f}% "
-        f"&nbsp;·&nbsp; 비중차이 {total_row['AvgW_D']:+.2f}% "
-        f"&nbsp;·&nbsp; 포트기여도 {total_row['CTR_P']:+.2f}% "
-        f"&nbsp;·&nbsp; BM기여도 {total_row['CTR_B']:+.2f}% "
-        f"&nbsp;·&nbsp; 기간수익률 {total_row['Rtn_B']:+.2f}% "
-        f"&nbsp;·&nbsp; 초과수익률 {total_row['TotAttr']:+.2f}% "
-        f"&nbsp;·&nbsp; 업종선택효과 {total_row['Alloc']:+.2f}% "
-        f"&nbsp;·&nbsp; 종목선택효과 {total_row['Selec']:+.2f}%"
-        "</div>",
-        unsafe_allow_html=True,
+    total_as_row = pd.DataFrame([{
+        "GICS": "전체", "AvgW_P": total_row["AvgW_P"], "AvgW_B": total_row["AvgW_B"],
+        "AvgW_D": total_row["AvgW_D"], "CTR_P": total_row["CTR_P"], "CTR_B": total_row["CTR_B"],
+        "Rtn_B": total_row["Rtn_B"], "TotAttr": total_row["TotAttr"],
+        "Alloc": total_row["Alloc"], "Selec": total_row["Selec"],
+    }])
+    sec_disp = pd.concat(
+        [total_as_row, sec[["GICS", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B",
+                             "Rtn_B", "TotAttr", "Alloc", "Selec"]]],
+        ignore_index=True,
     )
-
-    sec_disp = sec[["GICS", "AvgW_P", "AvgW_B", "AvgW_D", "CTR_P", "CTR_B",
-                     "Rtn_B", "TotAttr", "Alloc", "Selec"]].copy()
     sec_disp.columns = ["섹터", "포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도",
                          "기간수익률", "초과수익률", "업종선택효과", "종목선택효과"]
+
     pct_cols = ["포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도", "기간수익률", "초과수익률"]
     bar_cols = ["업종선택효과", "종목선택효과"]
     col_cfg = {c: st.column_config.NumberColumn(format="%+.2f%%") for c in pct_cols}
     for c in bar_cols:
         vmax = float(sec_disp[c].abs().max() or 1)
         col_cfg[c] = st.column_config.ProgressColumn(format="%+.2f%%", min_value=-vmax, max_value=vmax)
-    st.dataframe(sec_disp, hide_index=True, use_container_width=True, column_config=col_cfg)
+
+    def highlight_total(row):
+        return ["background-color:#4C72B033" if row["섹터"] == "전체" else "" for _ in row]
+
+    styled_sec = sec_disp.style.apply(highlight_total, axis=1)
+    st.dataframe(styled_sec, hide_index=True, use_container_width=True, column_config=col_cfg)
 
     sel_sector = st.selectbox(
         "업종 선택 → 종목 보기", sec["GICS"].tolist(), key=f"brinson_sector_drill_{key_prefix}"
