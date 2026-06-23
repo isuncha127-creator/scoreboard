@@ -1077,30 +1077,17 @@ def tab_portfolio_returns(df, factor_detail):
         merged[col_live] = merged[col_live].combine_first(merged[col_static])
     merged["live_price"] = merged["live_price"].combine_first(merged["static_price"])
 
-    # ── KPI 카드 ──
-    ok_mask = merged["YTD_R"].notna() & merged["최종포트"].notna()
-    avg_ytd = (merged.loc[ok_mask, "YTD_R"] * merged.loc[ok_mask, "최종포트"]).sum() / \
-              merged.loc[ok_mask, "최종포트"].sum() if ok_mask.any() else None
-    ok_1m = merged["1M_R"].notna() & merged["최종포트"].notna()
-    avg_1m  = (merged.loc[ok_1m, "1M_R"] * merged.loc[ok_1m, "최종포트"]).sum() / \
-              merged.loc[ok_1m, "최종포트"].sum() if ok_1m.any() else None
-    ok_d = merged["D_R"].notna() & merged["최종포트"].notna()
-    avg_d   = (merged.loc[ok_d, "D_R"] * merged.loc[ok_d, "최종포트"]).sum() / \
-              merged.loc[ok_d, "최종포트"].sum() if ok_d.any() else None
-    ok_1w = merged["1W_R"].notna() & merged["최종포트"].notna()
-    avg_1w  = (merged.loc[ok_1w, "1W_R"] * merged.loc[ok_1w, "최종포트"]).sum() / \
-              merged.loc[ok_1w, "최종포트"].sum() if ok_1w.any() else None
+    # ── AW × 수익률 ──
+    merged["AWxD"] = merged["최종AW"] * merged["D_R"]
+    merged["AWx1W"] = merged["최종AW"] * merged["1W_R"]
+    merged["AWx1M"] = merged["최종AW"] * merged["1M_R"]
+    merged["AWxYTD"] = merged["최종AW"] * merged["YTD_R"]
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("편입 종목수", f"{len(merged)}개")
-    c2.metric("포트 가중 일간",
-              f"{avg_d*100:+.2f}%" if avg_d is not None and pd.notna(avg_d) else "N/A")
-    c3.metric("포트 가중 1W",
-              f"{avg_1w*100:+.2f}%" if avg_1w is not None and pd.notna(avg_1w) else "N/A")
-    c4.metric("포트 가중 1M",
-              f"{avg_1m*100:+.2f}%" if avg_1m is not None and pd.notna(avg_1m) else "N/A")
-    c5.metric("포트 가중 YTD",
-              f"{avg_ytd*100:+.2f}%" if avg_ytd is not None and pd.notna(avg_ytd) else "N/A")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("AW×일간 합계", f"{merged['AWxD'].sum()*100:+.2f}%")
+    c2.metric("AW×1W 합계", f"{merged['AWx1W'].sum()*100:+.2f}%")
+    c3.metric("AW×1M 합계", f"{merged['AWx1M'].sum()*100:+.2f}%")
+    c4.metric("AW×YTD 합계", f"{merged['AWxYTD'].sum()*100:+.2f}%")
 
     st.divider()
 
@@ -1118,11 +1105,12 @@ def tab_portfolio_returns(df, factor_detail):
     }
     sort_col, sort_asc = sort_map[sort_by]
 
-    disp = merged[["Name", "GICS", "Country", "ticker", "최종포트", "최종AW",
-                    "live_price", "D_R", "1W_R", "1M_R", "YTD_R"]].copy()
+    disp = merged[["Name", "GICS", "ticker", "최종포트", "최종AW", "live_price",
+                    "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R"]].copy()
     disp = disp.sort_values(sort_col, ascending=sort_asc, na_position="last").reset_index(drop=True)
     disp.index += 1
-    disp.columns = ["종목명", "섹터", "국가", "티커", "포트비중", "AW", "현재가", "일간", "1W", "1M", "YTD"]
+    disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가",
+                     "AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
 
     # ret_color는 숫자값에 적용 (format 전에), NaN·비숫자 안전 처리
     def ret_color(v):
@@ -1139,18 +1127,16 @@ def tab_portfolio_returns(df, factor_detail):
     def _fmt_price(v):
         return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v:,.2f}"
 
+    ret_cols = ["AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
     styled = (
         disp.style
         .format({
             "포트비중": _fmt_w,
             "AW": _fmt_w,
             "현재가": _fmt_price,
-            "일간": _fmt_ret,
-            "1W": _fmt_ret,
-            "1M": _fmt_ret,
-            "YTD": _fmt_ret,
+            **{c: _fmt_ret for c in ret_cols},
         })
-        .map(ret_color, subset=["일간", "1W", "1M", "YTD"])
+        .map(ret_color, subset=ret_cols)
     )
     st.dataframe(styled, height=580, use_container_width=True)
 
