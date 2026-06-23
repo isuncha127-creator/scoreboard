@@ -1086,12 +1086,20 @@ def tab_portfolio_returns(df, factor_detail):
     def small_metric(col, label, v, bold=False):
         color = "#2ca02c" if v >= 0 else "#d62728"
         arrow = "▲" if v >= 0 else "▼"
-        weight = 800 if bold else 600
-        col.markdown(
-            f"<div style='font-size:14px;color:#888'>{label}</div>"
-            f"<div style='font-size:16px;font-weight:{weight};color:{color}'>{arrow} {v*100:+.2f}%</div>",
-            unsafe_allow_html=True,
-        )
+        if bold:
+            col.markdown(
+                f"<div style='font-size:14px;font-weight:700;color:#888'>{label}</div>"
+                f"<div style='font-size:20px;font-weight:900;color:{color};"
+                f"background:{color}1a;border-radius:6px;padding:2px 8px;display:inline-block'>"
+                f"{arrow} {v*100:+.2f}%</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            col.markdown(
+                f"<div style='font-size:14px;color:#888'>{label}</div>"
+                f"<div style='font-size:16px;font-weight:600;color:{color}'>{arrow} {v*100:+.2f}%</div>",
+                unsafe_allow_html=True,
+            )
 
     periods = ["일간", "1W", "1M", "YTD"]
     port_vals = [merged["AWxD"].sum(), merged["AWx1W"].sum(), merged["AWx1M"].sum(), merged["AWxYTD"].sum()]
@@ -1113,30 +1121,14 @@ def tab_portfolio_returns(df, factor_detail):
 
     st.divider()
 
-    col_sort, col_sector = st.columns(2)
-    with col_sort:
-        sort_by = st.selectbox(
-            "정렬 기준",
-            ["일간 수익률", "1주 수익률", "1M 수익률", "YTD 수익률"],
-            key="pr_sort",
-        )
-    with col_sector:
-        sector_opt = ["전체"] + sorted([s for s in merged["GICS"].dropna().unique() if isinstance(s, str)])
-        sel_sector = st.selectbox("섹터 필터", sector_opt, key="pr_sector")
-
-    sort_map = {
-        "일간 수익률":       ("D_R",    False),
-        "1주 수익률":        ("1W_R",   False),
-        "1M 수익률":         ("1M_R",   False),
-        "YTD 수익률":        ("YTD_R",  False),
-    }
-    sort_col, sort_asc = sort_map[sort_by]
+    sector_opt = ["전체"] + sorted([s for s in merged["GICS"].dropna().unique() if isinstance(s, str)])
+    sel_sector = st.selectbox("섹터 필터", sector_opt, key="pr_sector")
 
     filtered = merged if sel_sector == "전체" else merged[merged["GICS"] == sel_sector]
 
     disp = filtered[["Name", "GICS", "ticker", "최종포트", "최종AW", "live_price",
                       "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R"]].copy()
-    disp = disp.sort_values(sort_col, ascending=sort_asc, na_position="last").reset_index(drop=True)
+    disp = disp.sort_values("최종포트", ascending=False, na_position="last").reset_index(drop=True)
     disp.index += 1
     disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가",
                      "AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
