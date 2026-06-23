@@ -1083,47 +1083,23 @@ def tab_portfolio_returns(df, factor_detail):
     merged["AWx1M"] = merged["최종AW"] * merged["1M_R"]
     merged["AWxYTD"] = merged["최종AW"] * merged["YTD_R"]
 
+    periods = ["일간", "1W", "1M", "YTD"]
+    port_vals = [merged["AWxD"].sum(), merged["AWx1W"].sum(), merged["AWx1M"].sum(), merged["AWxYTD"].sum()]
+
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("AW×일간 합계", f"{merged['AWxD'].sum()*100:+.2f}%")
-    c2.metric("AW×1W 합계", f"{merged['AWx1W'].sum()*100:+.2f}%")
-    c3.metric("AW×1M 합계", f"{merged['AWx1M'].sum()*100:+.2f}%")
-    c4.metric("AW×YTD 합계", f"{merged['AWxYTD'].sum()*100:+.2f}%")
+    for col, label, v in zip([c1, c2, c3, c4], periods, port_vals):
+        col.metric(f"AW×{label} 합계", f"{v*100:+.2f}%", delta=f"{v*100:+.2f}%")
 
     # ── BM(URTH) 대비 상대수익률 ──
     bm_live = fetch_live_returns((("US4642863926", "URTH"),))
     bm_rec = bm_live.get("US4642863926", {})
-    periods = ["일간", "1W", "1M", "YTD"]
-    port_vals = [merged["AWxD"].sum(), merged["AWx1W"].sum(), merged["AWx1M"].sum(), merged["AWxYTD"].sum()]
     bm_vals = [bm_rec.get("D") or 0, bm_rec.get("1W") or 0, bm_rec.get("1M") or 0, bm_rec.get("YTD") or 0]
     rel_vals = [p - b for p, b in zip(port_vals, bm_vals)]
 
     r1, r2, r3, r4 = st.columns(4)
     for col, label, v in zip([r1, r2, r3, r4], periods, rel_vals):
-        col.metric(f"상대수익률({label})", f"{v*100:+.2f}%")
+        col.metric(f"상대수익률({label})", f"{v*100:+.2f}%", delta=f"{v*100:+.2f}%")
     st.caption("BM: iShares MSCI World ETF (URTH, US4642863926)")
-
-    col_cmp, col_rel = st.columns(2)
-    with col_cmp:
-        fig_cmp = go.Figure()
-        fig_cmp.add_trace(go.Bar(name="포트폴리오", x=periods, y=port_vals, marker_color="#4C72B0"))
-        fig_cmp.add_trace(go.Bar(name="URTH(BM)", x=periods, y=bm_vals, marker_color="#aec7e8"))
-        fig_cmp.update_layout(
-            barmode="group", yaxis=dict(tickformat="+.1%"), height=300,
-            margin=dict(l=0, r=0, t=10, b=10), legend=dict(orientation="h", y=1.15),
-        )
-        st.plotly_chart(fig_cmp, use_container_width=True)
-
-    with col_rel:
-        colors = ["#2ca02c" if v >= 0 else "#d62728" for v in rel_vals]
-        fig_rel = go.Figure(go.Bar(
-            x=periods, y=rel_vals, marker_color=colors,
-            text=[f"{v*100:+.2f}%" for v in rel_vals], textposition="outside",
-        ))
-        fig_rel.update_layout(
-            yaxis=dict(tickformat="+.1%"), height=300,
-            margin=dict(l=0, r=0, t=10, b=10),
-        )
-        st.plotly_chart(fig_rel, use_container_width=True)
 
     st.divider()
 
