@@ -841,29 +841,17 @@ def render_brinson_period(brinson, key_prefix="default"):
     def highlight_total(row):
         return ["background-color:#4C72B033" if row["섹터"] == "전체" else "" for _ in row]
 
-    def magnitude_bar(col):
-        vmax = col.abs().max() or 1
-        styles = []
-        for v in col:
-            if not isinstance(v, (int, float)) or pd.isna(v) or v == 0:
-                styles.append("")
-                continue
-            ratio = min(abs(v) / vmax, 1.0)
-            if v > 0:
-                styles.append(f"background-color:rgba(46,204,113,{0.15+0.55*ratio:.2f});color:#1e7e34;font-weight:600")
-            else:
-                styles.append(f"background-color:rgba(231,76,60,{0.15+0.55*ratio:.2f});color:#a71d2a;font-weight:600")
-        return styles
-
     pct_cols = ["포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도", "기간수익률", "초과수익률"]
     bar_cols = ["업종선택효과", "종목선택효과"]
-    col_cfg = {c: st.column_config.NumberColumn(format="%+.2f%%") for c in pct_cols + bar_cols}
+    col_cfg = {c: st.column_config.NumberColumn(format="%+.2f%%") for c in pct_cols}
+    for c in bar_cols:
+        vmax = float(sec_disp[c].abs().max() or 1)
+        col_cfg[c] = st.column_config.ProgressColumn(format="%+.2f%%", min_value=-vmax, max_value=vmax)
 
     styled_sec = (
         sec_disp.style
         .apply(highlight_total, axis=1)
         .map(sign_color, subset=pct_cols)
-        .apply(magnitude_bar, subset=bar_cols)
     )
     st.dataframe(styled_sec, hide_index=True, use_container_width=True, column_config=col_cfg)
 
@@ -876,8 +864,7 @@ def render_brinson_period(brinson, key_prefix="default"):
         sec_stocks.columns = stock_col_names
         styled_stocks = (
             sec_stocks.style
-            .map(sign_color, subset=["포트비중", "BM비중", "기간수익률"])
-            .apply(magnitude_bar, subset=["초과수익률", "종목선택효과"])
+            .map(sign_color, subset=stock_col_names[2:])
             .format({c: lambda v: f"{v:+.2f}%" if pd.notna(v) else "—" for c in stock_col_names[2:]})
         )
         st.dataframe(styled_stocks, hide_index=True, use_container_width=True)
