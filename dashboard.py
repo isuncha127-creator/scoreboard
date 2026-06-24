@@ -1436,11 +1436,11 @@ def tab_portfolio_returns(df, factor_detail):
         axis=1,
     )
 
-    # ── AW × 수익률 ──
-    merged["AWxD"] = merged["최종AW"] * merged["D_R"]
-    merged["AWx1W"] = merged["최종AW"] * merged["1W_R"]
-    merged["AWx1M"] = merged["최종AW"] * merged["1M_R"]
-    merged["AWxYTD"] = merged["최종AW"] * merged["YTD_R"]
+    # ── 포트비중 × 수익률 ──
+    merged["PWxD"] = merged["최종포트"] * merged["D_R"]
+    merged["PWx1W"] = merged["최종포트"] * merged["1W_R"]
+    merged["PWx1M"] = merged["최종포트"] * merged["1M_R"]
+    merged["PWxYTD"] = merged["최종포트"] * merged["YTD_R"]
 
     def small_metric(col, label, v, bold=False):
         color = "#2ca02c" if v >= 0 else "#d62728"
@@ -1461,11 +1461,11 @@ def tab_portfolio_returns(df, factor_detail):
             )
 
     periods = ["일간", "1W", "1M", "YTD"]
-    port_vals = [merged["AWxD"].sum(), merged["AWx1W"].sum(), merged["AWx1M"].sum(), merged["AWxYTD"].sum()]
+    port_vals = [merged["PWxD"].sum(), merged["PWx1W"].sum(), merged["PWx1M"].sum(), merged["PWxYTD"].sum()]
 
     c1, c2, c3, c4 = st.columns(4)
     for col, label, v in zip([c1, c2, c3, c4], periods, port_vals):
-        small_metric(col, f"AW×{label} 합계", v)
+        small_metric(col, f"포트비중×{label} 합계", v)
 
     # ── BM(URTH) 대비 상대수익률 ──
     bm_live = fetch_live_returns((("US4642863926", "URTH"),))
@@ -1486,11 +1486,11 @@ def tab_portfolio_returns(df, factor_detail):
     filtered = merged if sel_sector == "전체" else merged[merged["GICS"] == sel_sector]
 
     disp = filtered[["Name", "GICS", "ticker", "최종포트", "최종AW", "live_price",
-                      "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R"]].copy()
+                      "PWxD", "D_R", "PWx1W", "1W_R", "PWx1M", "1M_R", "PWxYTD", "YTD_R"]].copy()
     disp = disp.sort_values("최종포트", ascending=False, na_position="last").reset_index(drop=True)
     disp.index += 1
     disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가(USD)",
-                     "AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
+                     "포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD"]
 
     # ret_color는 숫자값에 적용 (format 전에), NaN·비숫자 안전 처리
     def ret_color(v):
@@ -1507,7 +1507,7 @@ def tab_portfolio_returns(df, factor_detail):
     def _fmt_price(v):
         return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v:,.2f}"
 
-    ret_cols = ["AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
+    ret_cols = ["포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD"]
     styled = (
         disp.style
         .format({
