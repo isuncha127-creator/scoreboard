@@ -574,6 +574,7 @@ def _fetch_one_ticker(isin: str, ticker: str, session: requests.Session) -> dict
         if not chart:
             return {"isin": isin, "error": "no data"}
 
+        currency = chart[0].get("meta", {}).get("currency")
         timestamps = chart[0].get("timestamp", [])
         closes_raw = chart[0]["indicators"]["quote"][0].get("close", [])
 
@@ -612,6 +613,7 @@ def _fetch_one_ticker(isin: str, ticker: str, session: requests.Session) -> dict
             "isin": isin,
             "ticker": ticker,
             "last_price": last_close,
+            "currency": currency,
             "D":   pct(prev_close),
             "1W":  pct(find_ref(7)),
             "1M":  pct(find_ref(31)),
@@ -640,6 +642,38 @@ def fetch_live_returns(ticker_tuples: tuple) -> dict:
             result[rec["isin"]] = rec
 
     return result
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_fx_rates(currencies: tuple) -> dict:
+    """currencies: tuple of ISO codes (e.g. ('KRW','JPY')). Returns {ccy: units per 1 USD}."""
+    rates = {"USD": 1.0}
+    others = [c for c in set(currencies) if c and c != "USD"]
+    if not others:
+        return rates
+
+    session = requests.Session()
+    session.headers.update(YAHOO_HEADERS)
+    session.verify = False
+
+    def _fetch_one(ccy):
+        try:
+            r = session.get(
+                f"https://query2.finance.yahoo.com/v8/finance/chart/{ccy}=X?interval=1d&range=5d",
+                timeout=10,
+            )
+            if r.status_code != 200:
+                return ccy, None
+            meta = r.json().get("chart", {}).get("result", [{}])[0].get("meta", {})
+            return ccy, meta.get("regularMarketPrice")
+        except Exception:
+            return ccy, None
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for ccy, rate in pool.map(_fetch_one, others):
+            if rate:
+                rates[ccy] = rate
+    return rates
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -1340,6 +1374,7 @@ def tab_portfolio_returns(df, factor_detail):
         live_rows.append({
             "ISIN": isin,
             "live_price": rec.get("last_price"),
+            "currency": rec.get("currency"),
             "D_R":   rec.get("D"),
             "1W_R":  rec.get("1W"),
             "1M_R":  rec.get("1M"),
@@ -1361,6 +1396,25 @@ def tab_portfolio_returns(df, factor_detail):
     for col_live, col_static in [("YTD_R", "s_YTD"), ("1M_R", "s_1M"), ("1W_R", "s_1W")]:
         merged[col_live] = merged[col_live].combine_first(merged[col_static])
     merged["live_price"] = merged["live_price"].combine_first(merged["static_price"])
+
+    # 현재가를 전부 USD로 환산 (GBp/ZAc 등 소단위(1/100) 표기 통화 보정)
+    MINOR_UNIT_CCY = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ILA": "ILS"}
+    fx_lookup_ccys = {MINOR_UNIT_CCY.get(c, c) for c in merged["currency"].dropna().unique()}
+    fx_rates = fetch_fx_rates(tuple(fx_lookup_ccys))
+
+    def _to_usd(r):
+        price, ccy = r["live_price"], r["currency"]
+        if pd.isna(price) or not ccy:
+            return price
+        if ccy in MINOR_UNIT_CCY:
+            price = price / 100
+            ccy = MINOR_UNIT_CCY[ccy]
+        return price / fx_rates.get(ccy, 1)
+
+    merged["live_price"] = merged.apply(
+        _to_usd,
+        axis=1,
+    )
 
     # ── AW × 수익률 ──
     merged["AWxD"] = merged["최종AW"] * merged["D_R"]
@@ -1415,7 +1469,7 @@ def tab_portfolio_returns(df, factor_detail):
                       "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R"]].copy()
     disp = disp.sort_values("최종포트", ascending=False, na_position="last").reset_index(drop=True)
     disp.index += 1
-    disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가",
+    disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가(USD)",
                      "AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
 
     # ret_color는 숫자값에 적용 (format 전에), NaN·비숫자 안전 처리
@@ -1439,7 +1493,7 @@ def tab_portfolio_returns(df, factor_detail):
         .format({
             "포트비중": _fmt_w,
             "AW": _fmt_w,
-            "현재가": _fmt_price,
+            "현재가(USD)": _fmt_price,
             **{c: _fmt_ret for c in ret_cols},
         }, na_rep="—")
         .map(ret_color, subset=ret_cols)
