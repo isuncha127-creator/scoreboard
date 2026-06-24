@@ -1347,6 +1347,7 @@ def tab_portfolio_returns(df, factor_detail):
 
     # 전일(가장 최근) daily 브린슨 파일로 포트비중/AW 갱신
     daily_periods = list_brinson_daily_periods()
+    unheld_bm_sum = None
     if daily_periods:
         latest_label = list(daily_periods.keys())[-1]
         try:
@@ -1362,6 +1363,13 @@ def tab_portfolio_returns(df, factor_detail):
             port_df["최종AW"] = port_df["daily_AW"].combine_first(port_df["최종AW"])
             port_df = port_df.drop(columns=["daily_포트비중", "daily_AW"])
             st.caption(f"포트비중/AW 기준일: {latest_label} (daily 브린슨 파일)")
+
+            # D열(BM비중)에는 있는데 C열(포트비중)에는 없는 = 미보유 BM 종목
+            unheld = daily_stock_df[
+                daily_stock_df["AvgW_P"].isna() & daily_stock_df["AvgW_B"].notna()
+            ].copy()
+            unheld["Rtn_B_eff"] = unheld["Rtn_B"].combine_first(unheld["Rtn_D"])
+            unheld_bm_sum = ((unheld["AvgW_B"] / 100) * (unheld["Rtn_B_eff"] / 100)).sum()
         except Exception as e:
             st.warning(f"daily 비중 갱신 실패({latest_label}): {e}")
 
@@ -1442,23 +1450,14 @@ def tab_portfolio_returns(df, factor_detail):
     merged["AWx1M"] = merged["최종AW"] * merged["1M_R"]
     merged["AWxYTD"] = merged["최종AW"] * merged["YTD_R"]
 
-    def small_metric(col, label, v, bold=False):
+    def small_metric(col, label, v):
         color = "#2ca02c" if v >= 0 else "#d62728"
         arrow = "▲" if v >= 0 else "▼"
-        if bold:
-            col.markdown(
-                f"<div style='font-size:14px;font-weight:700;color:#888'>{label}</div>"
-                f"<div style='font-size:20px;font-weight:900;color:{color};"
-                f"background:{color}1a;border-radius:6px;padding:2px 8px;display:inline-block'>"
-                f"{arrow} {v*100:+.2f}%</div>",
-                unsafe_allow_html=True,
-            )
-        else:
-            col.markdown(
-                f"<div style='font-size:14px;color:#888'>{label}</div>"
-                f"<div style='font-size:16px;font-weight:600;color:{color}'>{arrow} {v*100:+.2f}%</div>",
-                unsafe_allow_html=True,
-            )
+        col.markdown(
+            f"<div style='font-size:16px;color:#888'>{label}</div>"
+            f"<div style='font-size:22px;font-weight:700;color:{color}'>{arrow} {v*100:+.2f}%</div>",
+            unsafe_allow_html=True,
+        )
 
     periods = ["일간", "1W", "1M", "YTD"]
     port_vals = [merged["AWxD"].sum(), merged["AWx1W"].sum(), merged["AWx1M"].sum(), merged["AWxYTD"].sum()]
@@ -1466,6 +1465,9 @@ def tab_portfolio_returns(df, factor_detail):
     c1, c2, c3, c4 = st.columns(4)
     for col, label, v in zip([c1, c2, c3, c4], periods, port_vals):
         small_metric(col, f"AW×{label} 합계", v)
+
+    if unheld_bm_sum is not None:
+        small_metric(c1, "미보유 BM종목 비중×수익률 합계", unheld_bm_sum)
 
     st.divider()
 
