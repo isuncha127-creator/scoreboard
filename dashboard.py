@@ -480,6 +480,26 @@ BRINSON_PERIODS = {
     "2026-05-29 ~ 2026-06-22": "월간 성과파일/20260622.xlsx",
 }
 
+BRINSON_DAILY_DIR = "월간 성과파일/daily"
+
+
+def list_brinson_daily_periods() -> dict:
+    """daily 폴더의 YYYYMMDD.xlsx 파일들을 날짜순으로 스캔해 {라벨: 경로} 반환."""
+    base = os.path.join(os.path.dirname(__file__), BRINSON_DAILY_DIR)
+    if not os.path.isdir(base):
+        return {}
+    periods = {}
+    for fname in sorted(os.listdir(base)):
+        if not fname.lower().endswith(".xlsx") or fname.startswith("~$"):
+            continue
+        stem = fname[:-5]
+        if len(stem) == 8 and stem.isdigit():
+            label = f"{stem[:4]}-{stem[4:6]}-{stem[6:]}"
+        else:
+            label = stem
+        periods[label] = f"{BRINSON_DAILY_DIR}/{fname}"
+    return dict(sorted(periods.items()))
+
 BRINSON_ADDITIVE_COLS = ["CTR_P", "CTR_B", "CTR_D", "TotAttr", "Alloc", "Selec", "Curr", "Inter"]
 
 
@@ -906,8 +926,18 @@ def render_brinson_period(brinson, key_prefix="default"):
 def tab_brinson():
     st.subheader("브린슨 성과 기여분석")
 
-    period_labels = list(BRINSON_PERIODS.keys())
-    selected = st.multiselect("기간 선택", period_labels, default=period_labels, key="brinson_periods")
+    unit = st.radio("단위", ["월간", "일간"], horizontal=True, key="brinson_unit")
+    period_source = BRINSON_PERIODS if unit == "월간" else list_brinson_daily_periods()
+
+    if not period_source:
+        st.info("daily 폴더에 등록된 파일이 없습니다.")
+        return
+
+    period_labels = list(period_source.keys())
+    default_sel = period_labels if unit == "월간" else period_labels[-1:]
+    selected = st.multiselect(
+        "기간 선택", period_labels, default=default_sel, key=f"brinson_periods_{unit}"
+    )
     mode = st.radio("보기 방식", ["합쳐서 보기", "나눠서 보기"], horizontal=True, key="brinson_mode")
 
     if not selected:
@@ -917,7 +947,7 @@ def tab_brinson():
     loaded = {}
     for label in selected:
         try:
-            loaded[label] = load_brinson(BRINSON_PERIODS[label])
+            loaded[label] = load_brinson(period_source[label])
         except Exception as e:
             st.error(f"{label} 파일 로드 실패: {e}")
 
@@ -927,11 +957,11 @@ def tab_brinson():
     if mode == "나눠서 보기":
         for label, brinson in loaded.items():
             st.markdown(f"### {label}")
-            render_brinson_period(brinson, key_prefix=label)
+            render_brinson_period(brinson, key_prefix=f"{unit}_{label}")
             st.divider()
     else:
         st.caption(f"합산 기간: {', '.join(loaded.keys())}")
-        render_brinson_period(combine_brinson_periods(loaded), key_prefix="combined")
+        render_brinson_period(combine_brinson_periods(loaded), key_prefix=f"{unit}_combined")
 
 
 def tab_factor(df):
