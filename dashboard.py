@@ -1354,9 +1354,9 @@ def tab_portfolio_returns(df, factor_detail):
             daily_w = (
                 daily_stock_df.dropna(subset=["ISIN"])
                 .drop_duplicates(subset=["ISIN"])
-                .set_index("ISIN")[["AvgW_P", "EndW_P"]] / 100
+                .set_index("ISIN")[["AvgW_P", "AvgW_D"]] / 100
             )
-            daily_w = daily_w.rename(columns={"AvgW_P": "daily_포트비중", "EndW_P": "daily_AW"})
+            daily_w = daily_w.rename(columns={"AvgW_P": "daily_포트비중", "AvgW_D": "daily_AW"})
             port_df = port_df.merge(daily_w, on="ISIN", how="left")
             port_df["최종포트"] = port_df["daily_포트비중"].combine_first(port_df["최종포트"])
             port_df["최종AW"] = port_df["daily_AW"].combine_first(port_df["최종AW"])
