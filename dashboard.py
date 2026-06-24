@@ -857,6 +857,8 @@ def render_brinson_period(brinson, key_prefix="default"):
     )
     st.dataframe(styled_sec, hide_index=True, use_container_width=True, column_config=col_cfg)
 
+    stock_col_cfg = {c: st.column_config.NumberColumn(format="%+.2f%%") for c in stock_col_names[2:]}
+
     sel_sector = st.selectbox(
         "업종 선택 → 종목 보기", sec["GICS"].tolist(), key=f"brinson_sector_drill_{key_prefix}"
     )
@@ -864,12 +866,10 @@ def render_brinson_period(brinson, key_prefix="default"):
         sec_stocks = stock_df[stock_df["GICS"] == sel_sector][stock_cols].copy()
         sec_stocks = sec_stocks.sort_values("TotAttr", ascending=False)
         sec_stocks.columns = stock_col_names
-        styled_stocks = (
-            sec_stocks.style
-            .map(sign_color, subset=stock_col_names[2:])
-            .format({c: lambda v: f"{v:+.2f}%" if pd.notna(v) else "—" for c in stock_col_names[2:]})
+        styled_stocks = sec_stocks.style.map(sign_color, subset=stock_col_names[2:])
+        st.dataframe(
+            styled_stocks, hide_index=True, use_container_width=True, column_config=stock_col_cfg
         )
-        st.dataframe(styled_stocks, hide_index=True, use_container_width=True)
 
     st.markdown("**종목별 기여 Top 10 / Bottom 10 (초과수익률 기준)**")
 
@@ -878,18 +878,18 @@ def render_brinson_period(brinson, key_prefix="default"):
         st.markdown("**기여 상위 10**")
         top10 = stock_df.nlargest(10, "TotAttr")[stock_cols].copy()
         top10.columns = stock_col_names
-        styled_top10 = top10.style.map(sign_color, subset=stock_col_names[2:]).format(
-            {c: lambda v: f"{v:+.2f}%" if pd.notna(v) else "—" for c in stock_col_names[2:]}
+        styled_top10 = top10.style.map(sign_color, subset=stock_col_names[2:])
+        st.dataframe(
+            styled_top10, hide_index=True, use_container_width=True, column_config=stock_col_cfg
         )
-        st.dataframe(styled_top10, hide_index=True, use_container_width=True)
     with col_bot:
         st.markdown("**기여 하위 10**")
         bot10 = stock_df.nsmallest(10, "TotAttr")[stock_cols].copy()
         bot10.columns = stock_col_names
-        styled_bot10 = bot10.style.map(sign_color, subset=stock_col_names[2:]).format(
-            {c: lambda v: f"{v:+.2f}%" if pd.notna(v) else "—" for c in stock_col_names[2:]}
+        styled_bot10 = bot10.style.map(sign_color, subset=stock_col_names[2:])
+        st.dataframe(
+            styled_bot10, hide_index=True, use_container_width=True, column_config=stock_col_cfg
         )
-        st.dataframe(styled_bot10, hide_index=True, use_container_width=True)
 
 
 def tab_brinson():
@@ -1400,7 +1400,7 @@ def tab_portfolio_returns(df, factor_detail):
             "AW": _fmt_w,
             "현재가": _fmt_price,
             **{c: _fmt_ret for c in ret_cols},
-        })
+        }, na_rep="—")
         .map(ret_color, subset=ret_cols)
     )
     st.dataframe(styled, height=580, use_container_width=True)
