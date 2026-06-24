@@ -529,7 +529,7 @@ def combine_brinson_periods(loaded: dict):
     def combine_df(dfs, key_cols):
         all_df = pd.concat(dfs, ignore_index=True)
         agg = all_df.groupby(key_cols, as_index=False)[BRINSON_ADDITIVE_COLS].sum()
-        latest = dfs[-1][key_cols + ["AvgW_P", "AvgW_B", "AvgW_D", "Rtn_B"]]
+        latest = dfs[-1][key_cols + ["AvgW_P", "AvgW_B", "AvgW_D", "Rtn_B", "Rtn_D"]]
         return agg.merge(latest, on=key_cols, how="left")
 
     combined_sector = combine_df(sector_dfs, ["GICS"])
