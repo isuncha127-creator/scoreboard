@@ -649,7 +649,7 @@ def fetch_live_returns(ticker_tuples: tuple) -> dict:
 
 def _fetch_daily_series(ticker: str, session: requests.Session):
     try:
-        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1y"
+        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1mo"
         r = session.get(url, timeout=12)
         if r.status_code != 200:
             return None
@@ -1542,12 +1542,12 @@ def tab_portfolio_returns(df, factor_detail):
     st.markdown("**손절룰 (BM 상대 트레일링 손절 — MMR)**")
     mmr_threshold = st.slider("손절 임계폭 (%p)", 4, 20, 10, key="pr_mmr_threshold") / 100
     st.caption(
-        "진입일 데이터가 없어 가격 데이터가 있는 최근 1년 구간을 기준으로 근사 계산 "
+        "진입일 데이터가 없어 최근 1개월 구간을 기준으로 근사 계산 "
         "(실제 편입일 기준 아님). BM: iShares MSCI World ETF (URTH)."
     )
 
     mmr_tickers = tuple(set(merged["ticker"].dropna()) | {"URTH"})
-    with st.spinner("손절룰 계산을 위한 1년치 가격 데이터 로딩 중..."):
+    with st.spinner("손절룰 계산을 위한 1개월치 가격 데이터 로딩 중..."):
         series_map = fetch_daily_series_batch(mmr_tickers)
     urth_series = series_map.get("URTH")
 
@@ -1626,7 +1626,10 @@ def tab_portfolio_returns(df, factor_detail):
         .map(ret_color, subset=ret_cols)
         .apply(lambda col: [mmr_color(p) for p in mmr_progress_raw], subset=["진행률", "발동"])
     )
-    st.dataframe(styled, height=580, use_container_width=True)
+    narrow_cols = [c for c in disp.columns if c not in ("종목명", "섹터")]
+    col_cfg = {c: st.column_config.Column(width="small") for c in narrow_cols}
+    col_cfg.update({c: st.column_config.Column(width="medium") for c in ["종목명", "섹터"]})
+    st.dataframe(styled, height=580, use_container_width=True, column_config=col_cfg)
 
     st.markdown("**일간 ±5% 이상 급등/급락 종목**")
     movers = merged[merged["D_R"].abs() >= 0.05][["ISIN", "Name", "ticker", "D_R"]].copy()
