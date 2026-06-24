@@ -644,6 +644,95 @@ def fetch_live_returns(ticker_tuples: tuple) -> dict:
     return result
 
 
+# ─── 손절룰(MMR): 국가 → BM ETF 매핑 ─────────────────────────────────────────
+
+MMR_DEVELOPED_EX_US = {
+    "United Kingdom", "France", "Germany", "Japan", "Switzerland", "Netherlands",
+    "Spain", "Italy", "Australia", "Canada", "Hong Kong", "Singapore", "Sweden",
+    "Denmark", "Norway", "Belgium", "Austria", "Ireland", "Israel", "New Zealand",
+    "Finland", "Portugal",
+}
+MMR_EMERGING = {
+    "South Korea", "Taiwan", "China", "India", "Brazil", "South Africa", "Mexico",
+    "Indonesia", "Thailand", "Malaysia", "Philippines", "Poland", "Turkey",
+    "Saudi Arabia", "United Arab Emirates",
+}
+
+
+def mmr_bm_ticker(country: str) -> str:
+    if country == "United States":
+        return "SPY"
+    if country in MMR_EMERGING:
+        return "IEMG"
+    if country in MMR_DEVELOPED_EX_US:
+        return "IEFA"
+    return "ACWI"
+
+
+def _fetch_daily_series(ticker: str, session: requests.Session):
+    try:
+        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1y"
+        r = session.get(url, timeout=12)
+        if r.status_code != 200:
+            return None
+        chart = r.json().get("chart", {}).get("result", [])
+        if not chart:
+            return None
+        timestamps = chart[0].get("timestamp", [])
+        closes = chart[0]["indicators"]["quote"][0].get("close", [])
+        pairs = {
+            datetime.utcfromtimestamp(t).date(): c
+            for t, c in zip(timestamps, closes) if c is not None
+        }
+        if not pairs:
+            return None
+        return pd.Series(pairs).sort_index()
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_daily_series_batch(tickers: tuple) -> dict:
+    """tickers: tuple of yahoo tickers. Returns {ticker: pd.Series(date -> close)}."""
+    session = requests.Session()
+    session.headers.update(YAHOO_HEADERS)
+    session.verify = False
+    result = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_fetch_daily_series, t, session): t for t in set(tickers)}
+        for fut in as_completed(futures):
+            result[futures[fut]] = fut.result()
+    return result
+
+
+def compute_mmr(stock_series, bm_series, threshold: float):
+    """1년 시계열 기준 누적알파 MMR(Max Mark-down Rule) 손절 지표 계산."""
+    if stock_series is None or bm_series is None:
+        return None
+    common = stock_series.index.intersection(bm_series.index)
+    if len(common) < 2:
+        return None
+    s = stock_series.loc[common].sort_index()
+    b = bm_series.loc[common].sort_index()
+    s_ret = s / s.iloc[0] - 1
+    b_ret = b / b.iloc[0] - 1
+    alpha = s_ret - b_ret
+    peak = alpha.cummax().clip(lower=0)
+    current_alpha = float(alpha.iloc[-1])
+    peak_alpha = float(peak.iloc[-1])
+    drawdown = peak_alpha - current_alpha
+    room = current_alpha - (peak_alpha - threshold)
+    progress = (drawdown / threshold) if threshold > 0 else 0
+    return {
+        "현재알파": current_alpha,
+        "peak_alpha": peak_alpha,
+        "낙폭": drawdown,
+        "여유": room,
+        "진행률": progress,
+        "발동": room <= 0,
+    }
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_fx_rates(currencies: tuple) -> dict:
     """currencies: tuple of ISO codes (e.g. ('KRW','JPY')). Returns {ccy: units per 1 USD}."""
@@ -1471,17 +1560,44 @@ def tab_portfolio_returns(df, factor_detail):
 
     st.divider()
 
+    # ── 손절룰(MMR): BM 상대 트레일링 손절 ──
+    st.markdown("**손절룰 (BM 상대 트레일링 손절 — MMR)**")
+    mmr_threshold = st.slider("손절 임계폭 (%p)", 4, 20, 10, key="pr_mmr_threshold") / 100
+    st.caption(
+        "진입일 데이터가 없어 가격 데이터가 있는 최근 1년 구간을 기준으로 근사 계산 "
+        "(실제 편입일 기준 아님). BM은 국가 기준 자동 매핑: 미국→SPY, 선진국→IEFA, 신흥국→IEMG, 그 외→ACWI."
+    )
+
+    merged["bm_ticker"] = merged["Country"].apply(mmr_bm_ticker)
+    mmr_tickers = tuple(set(merged["ticker"].dropna()) | set(merged["bm_ticker"].dropna()))
+    with st.spinner("손절룰 계산을 위한 1년치 가격 데이터 로딩 중..."):
+        series_map = fetch_daily_series_batch(mmr_tickers)
+
+    mmr_rows = []
+    for _, row in merged.iterrows():
+        mmr = compute_mmr(
+            series_map.get(row["ticker"]), series_map.get(row["bm_ticker"]), mmr_threshold
+        )
+        if mmr is None:
+            mmr_rows.append({"ISIN": row["ISIN"], "현재알파": None, "peak_alpha": None,
+                              "낙폭": None, "여유": None, "진행률": None, "발동": None})
+        else:
+            mmr_rows.append({"ISIN": row["ISIN"], **mmr})
+    merged = merged.merge(pd.DataFrame(mmr_rows), on="ISIN", how="left")
+
     sector_opt = ["전체"] + sorted([s for s in merged["GICS"].dropna().unique() if isinstance(s, str)])
     sel_sector = st.selectbox("섹터 필터", sector_opt, key="pr_sector")
 
     filtered = merged if sel_sector == "전체" else merged[merged["GICS"] == sel_sector]
 
-    disp = filtered[["Name", "GICS", "ticker", "최종포트", "최종AW", "live_price",
-                      "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R"]].copy()
+    disp = filtered[["Name", "GICS", "ticker", "bm_ticker", "최종포트", "최종AW", "live_price",
+                      "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R",
+                      "현재알파", "peak_alpha", "낙폭", "여유", "진행률", "발동"]].copy()
     disp = disp.sort_values("최종포트", ascending=False, na_position="last").reset_index(drop=True)
     disp.index += 1
-    disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가(USD)",
-                     "포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD"]
+    disp.columns = ["종목명", "섹터", "티커", "BM티커", "포트비중", "AW", "현재가(USD)",
+                     "포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD",
+                     "현재알파", "PeakA", "낙폭", "여유", "진행률", "발동"]
 
     # ret_color는 숫자값에 적용 (format 전에), NaN·비숫자 안전 처리
     def ret_color(v):
@@ -1498,7 +1614,30 @@ def tab_portfolio_returns(df, factor_detail):
     def _fmt_price(v):
         return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v:,.2f}"
 
+    def _fmt_pp(v):
+        return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v*100:+.2f}%p"
+
+    def mmr_color(progress):
+        if not isinstance(progress, (int, float)) or pd.isna(progress):
+            return ""
+        if progress >= 0.85:
+            return "color:#fff;background-color:#d62728;font-weight:700"
+        if progress >= 0.60:
+            return "background-color:#fde2e2;color:#9c0006;font-weight:600"
+        if progress >= 0.30:
+            return "background-color:#ffeb9c;color:#9c6500"
+        return "color:#2ca02c"
+
+    mmr_progress_raw = disp["진행률"].copy()
+    disp["진행률"] = disp["진행률"].apply(
+        lambda v: "—" if not isinstance(v, (int, float)) or pd.isna(v) else f"{v*100:.0f}%"
+    )
+    disp["발동"] = disp["발동"].apply(
+        lambda v: "—" if v is None or (isinstance(v, float) and pd.isna(v)) else ("🔴 손절" if v else "정상")
+    )
+
     ret_cols = ["포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD"]
+    pp_cols = ["현재알파", "PeakA", "낙폭", "여유"]
     styled = (
         disp.style
         .format({
@@ -1506,8 +1645,10 @@ def tab_portfolio_returns(df, factor_detail):
             "AW": _fmt_w,
             "현재가(USD)": _fmt_price,
             **{c: _fmt_ret for c in ret_cols},
+            **{c: _fmt_pp for c in pp_cols},
         }, na_rep="—")
         .map(ret_color, subset=ret_cols)
+        .apply(lambda col: [mmr_color(p) for p in mmr_progress_raw], subset=["진행률", "발동"])
     )
     st.dataframe(styled, height=580, use_container_width=True)
 
