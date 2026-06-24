@@ -1401,11 +1401,7 @@ def tab_portfolio_returns(df, factor_detail):
         })
         .map(ret_color, subset=ret_cols)
     )
-    styled = styled.set_table_attributes("style='width:100%'")
-    st.markdown(
-        f"<div style='font-size:16px;max-height:580px;overflow-y:auto;width:100%'>{styled.to_html()}</div>",
-        unsafe_allow_html=True,
-    )
+    st.dataframe(styled, height=580, use_container_width=True)
 
     st.markdown("**일간 ±5% 이상 급등/급락 종목**")
     movers = merged[merged["D_R"].abs() >= 0.05][["ISIN", "Name", "ticker", "D_R"]].copy()
@@ -1598,7 +1594,6 @@ def main():
     if not check_password():
         return
 
-    st.title("03Y51 스코어보드 대시보드")
     st.caption("03Y51 운용파일_20260602(6월)_mk.xlsx 기준")
 
     try:
