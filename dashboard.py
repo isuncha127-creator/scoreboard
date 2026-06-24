@@ -835,29 +835,33 @@ def render_brinson_period(brinson, key_prefix="default"):
     sec_disp.columns = ["섹터", "포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도",
                          "기간수익률", "초과수익률", "업종선택효과", "종목선택효과"]
 
-    def sign_color(v):
-        if not isinstance(v, (int, float)) or pd.isna(v):
+    def fmt_signed_pct(v):
+        return "—" if not isinstance(v, (int, float)) or pd.isna(v) else f"{v:+.2f}%"
+
+    def sign_color_str(v):
+        if not isinstance(v, str) or not v or v == "—":
             return ""
-        return "color:#2ca02c" if v > 0 else "color:#d62728" if v < 0 else ""
+        return "color:#2ca02c" if v.startswith("+") else "color:#d62728" if v.startswith("-") else ""
 
     def highlight_total(row):
         return ["background-color:#4C72B033" if row["섹터"] == "전체" else "" for _ in row]
 
     pct_cols = ["포트비중", "BM비중", "비중차이", "포트기여도", "BM기여도", "기간수익률", "초과수익률"]
     bar_cols = ["업종선택효과", "종목선택효과"]
-    col_cfg = {c: st.column_config.NumberColumn(format="%+.2f%%") for c in pct_cols}
+
+    col_cfg = {}
     for c in bar_cols:
         vmax = float(sec_disp[c].abs().max() or 1)
         col_cfg[c] = st.column_config.ProgressColumn(format="%+.2f%%", min_value=-vmax, max_value=vmax)
+    for c in pct_cols:
+        sec_disp[c] = sec_disp[c].apply(fmt_signed_pct)
 
     styled_sec = (
         sec_disp.style
         .apply(highlight_total, axis=1)
-        .map(sign_color, subset=pct_cols)
+        .map(sign_color_str, subset=pct_cols)
     )
     st.dataframe(styled_sec, hide_index=True, use_container_width=True, column_config=col_cfg)
-
-    stock_col_cfg = {c: st.column_config.NumberColumn(format="%+.2f%%") for c in stock_col_names[2:]}
 
     sel_sector = st.selectbox(
         "업종 선택 → 종목 보기", sec["GICS"].tolist(), key=f"brinson_sector_drill_{key_prefix}"
@@ -866,10 +870,10 @@ def render_brinson_period(brinson, key_prefix="default"):
         sec_stocks = stock_df[stock_df["GICS"] == sel_sector][stock_cols].copy()
         sec_stocks = sec_stocks.sort_values("TotAttr", ascending=False)
         sec_stocks.columns = stock_col_names
-        styled_stocks = sec_stocks.style.map(sign_color, subset=stock_col_names[2:])
-        st.dataframe(
-            styled_stocks, hide_index=True, use_container_width=True, column_config=stock_col_cfg
-        )
+        for c in stock_col_names[2:]:
+            sec_stocks[c] = sec_stocks[c].apply(fmt_signed_pct)
+        styled_stocks = sec_stocks.style.map(sign_color_str, subset=stock_col_names[2:])
+        st.dataframe(styled_stocks, hide_index=True, use_container_width=True)
 
     st.markdown("**종목별 기여 Top 10 / Bottom 10 (초과수익률 기준)**")
 
@@ -878,18 +882,18 @@ def render_brinson_period(brinson, key_prefix="default"):
         st.markdown("**기여 상위 10**")
         top10 = stock_df.nlargest(10, "TotAttr")[stock_cols].copy()
         top10.columns = stock_col_names
-        styled_top10 = top10.style.map(sign_color, subset=stock_col_names[2:])
-        st.dataframe(
-            styled_top10, hide_index=True, use_container_width=True, column_config=stock_col_cfg
-        )
+        for c in stock_col_names[2:]:
+            top10[c] = top10[c].apply(fmt_signed_pct)
+        styled_top10 = top10.style.map(sign_color_str, subset=stock_col_names[2:])
+        st.dataframe(styled_top10, hide_index=True, use_container_width=True)
     with col_bot:
         st.markdown("**기여 하위 10**")
         bot10 = stock_df.nsmallest(10, "TotAttr")[stock_cols].copy()
         bot10.columns = stock_col_names
-        styled_bot10 = bot10.style.map(sign_color, subset=stock_col_names[2:])
-        st.dataframe(
-            styled_bot10, hide_index=True, use_container_width=True, column_config=stock_col_cfg
-        )
+        for c in stock_col_names[2:]:
+            bot10[c] = bot10[c].apply(fmt_signed_pct)
+        styled_bot10 = bot10.style.map(sign_color_str, subset=stock_col_names[2:])
+        st.dataframe(styled_bot10, hide_index=True, use_container_width=True)
 
 
 def tab_brinson():
