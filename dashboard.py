@@ -1540,7 +1540,7 @@ def tab_portfolio_returns(df, factor_detail):
 
     # ── 손절룰(MMR): BM 상대 트레일링 손절 ──
     st.markdown("**손절룰 (BM 상대 트레일링 손절 — MMR)**")
-    mmr_threshold = 0.10
+    mmr_threshold = 0.20
     st.caption(
         "진입일 데이터가 없어 최근 1개월 구간을 기준으로 근사 계산 "
         "(실제 편입일 기준 아님). BM: iShares MSCI World ETF (URTH)."
