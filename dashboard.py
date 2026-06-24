@@ -644,29 +644,7 @@ def fetch_live_returns(ticker_tuples: tuple) -> dict:
     return result
 
 
-# ─── 손절룰(MMR): 국가 → BM ETF 매핑 ─────────────────────────────────────────
-
-MMR_DEVELOPED_EX_US = {
-    "United Kingdom", "France", "Germany", "Japan", "Switzerland", "Netherlands",
-    "Spain", "Italy", "Australia", "Canada", "Hong Kong", "Singapore", "Sweden",
-    "Denmark", "Norway", "Belgium", "Austria", "Ireland", "Israel", "New Zealand",
-    "Finland", "Portugal",
-}
-MMR_EMERGING = {
-    "South Korea", "Taiwan", "China", "India", "Brazil", "South Africa", "Mexico",
-    "Indonesia", "Thailand", "Malaysia", "Philippines", "Poland", "Turkey",
-    "Saudi Arabia", "United Arab Emirates",
-}
-
-
-def mmr_bm_ticker(country: str) -> str:
-    if country == "United States":
-        return "SPY"
-    if country in MMR_EMERGING:
-        return "IEMG"
-    if country in MMR_DEVELOPED_EX_US:
-        return "IEFA"
-    return "ACWI"
+# ─── 손절룰(MMR) ──────────────────────────────────────────────────────────────
 
 
 def _fetch_daily_series(ticker: str, session: requests.Session):
@@ -1565,19 +1543,17 @@ def tab_portfolio_returns(df, factor_detail):
     mmr_threshold = st.slider("손절 임계폭 (%p)", 4, 20, 10, key="pr_mmr_threshold") / 100
     st.caption(
         "진입일 데이터가 없어 가격 데이터가 있는 최근 1년 구간을 기준으로 근사 계산 "
-        "(실제 편입일 기준 아님). BM은 국가 기준 자동 매핑: 미국→SPY, 선진국→IEFA, 신흥국→IEMG, 그 외→ACWI."
+        "(실제 편입일 기준 아님). BM: iShares MSCI World ETF (URTH)."
     )
 
-    merged["bm_ticker"] = merged["Country"].apply(mmr_bm_ticker)
-    mmr_tickers = tuple(set(merged["ticker"].dropna()) | set(merged["bm_ticker"].dropna()))
+    mmr_tickers = tuple(set(merged["ticker"].dropna()) | {"URTH"})
     with st.spinner("손절룰 계산을 위한 1년치 가격 데이터 로딩 중..."):
         series_map = fetch_daily_series_batch(mmr_tickers)
+    urth_series = series_map.get("URTH")
 
     mmr_rows = []
     for _, row in merged.iterrows():
-        mmr = compute_mmr(
-            series_map.get(row["ticker"]), series_map.get(row["bm_ticker"]), mmr_threshold
-        )
+        mmr = compute_mmr(series_map.get(row["ticker"]), urth_series, mmr_threshold)
         if mmr is None:
             mmr_rows.append({"ISIN": row["ISIN"], "현재알파": None, "peak_alpha": None,
                               "낙폭": None, "여유": None, "진행률": None, "발동": None})
@@ -1590,12 +1566,12 @@ def tab_portfolio_returns(df, factor_detail):
 
     filtered = merged if sel_sector == "전체" else merged[merged["GICS"] == sel_sector]
 
-    disp = filtered[["Name", "GICS", "ticker", "bm_ticker", "최종포트", "최종AW", "live_price",
+    disp = filtered[["Name", "GICS", "ticker", "최종포트", "최종AW", "live_price",
                       "AWxD", "D_R", "AWx1W", "1W_R", "AWx1M", "1M_R", "AWxYTD", "YTD_R",
                       "현재알파", "peak_alpha", "낙폭", "여유", "진행률", "발동"]].copy()
     disp = disp.sort_values("최종포트", ascending=False, na_position="last").reset_index(drop=True)
     disp.index += 1
-    disp.columns = ["종목명", "섹터", "티커", "BM티커", "포트비중", "AW", "현재가(USD)",
+    disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가(USD)",
                      "포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD",
                      "현재알파", "PeakA", "낙폭", "여유", "진행률", "발동"]
 
