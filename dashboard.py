@@ -1,4 +1,5 @@
 import re
+import hashlib
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -1574,16 +1575,28 @@ def tab_factor_detail(df, factor_detail):
             st.dataframe(pd.DataFrame(rows_list), hide_index=True, use_container_width=True)
 
 
+AUTH_SALT = "03y51-scoreboard"
+
+
+def _auth_token(password: str) -> str:
+    return hashlib.sha256(f"{AUTH_SALT}:{password}".encode()).hexdigest()[:16]
+
+
 def check_password() -> bool:
     if st.session_state.get("authenticated"):
+        return True
+
+    correct = st.secrets.get("password")
+    if correct and st.query_params.get("auth") == _auth_token(correct):
+        st.session_state["authenticated"] = True
         return True
 
     st.title("🔒 03Y51 스코어보드")
     pw = st.text_input("비밀번호", type="password")
     if st.button("입력"):
-        correct = st.secrets.get("password")
         if correct and pw == correct:
             st.session_state["authenticated"] = True
+            st.query_params["auth"] = _auth_token(correct)
             st.rerun()
         else:
             st.error("비밀번호가 올바르지 않습니다.")
