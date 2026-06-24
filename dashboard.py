@@ -1,6 +1,7 @@
 import re
 import hashlib
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -1582,12 +1583,15 @@ def _auth_token(password: str) -> str:
     return hashlib.sha256(f"{AUTH_SALT}:{password}".encode()).hexdigest()[:16]
 
 
+AUTH_COOKIE = "y51_auth"
+
+
 def check_password() -> bool:
     if st.session_state.get("authenticated"):
         return True
 
     correct = st.secrets.get("password")
-    if correct and st.query_params.get("auth") == _auth_token(correct):
+    if correct and st.context.cookies.get(AUTH_COOKIE) == _auth_token(correct):
         st.session_state["authenticated"] = True
         return True
 
@@ -1596,7 +1600,11 @@ def check_password() -> bool:
     if st.button("입력"):
         if correct and pw == correct:
             st.session_state["authenticated"] = True
-            st.query_params["auth"] = _auth_token(correct)
+            token = _auth_token(correct)
+            components.html(
+                f"<script>document.cookie = '{AUTH_COOKIE}={token}; max-age=2592000; path=/; SameSite=Lax';</script>",
+                height=0,
+            )
             st.rerun()
         else:
             st.error("비밀번호가 올바르지 않습니다.")
