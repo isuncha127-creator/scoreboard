@@ -1345,6 +1345,26 @@ def tab_portfolio_returns(df, factor_detail):
     ])
     port_df = pd.concat([port_df, extra_holdings], ignore_index=True)
 
+    # 전일(가장 최근) daily 브린슨 파일로 포트비중/AW 갱신
+    daily_periods = list_brinson_daily_periods()
+    if daily_periods:
+        latest_label = list(daily_periods.keys())[-1]
+        try:
+            _, _, daily_stock_df = load_brinson(daily_periods[latest_label])
+            daily_w = (
+                daily_stock_df.dropna(subset=["ISIN"])
+                .drop_duplicates(subset=["ISIN"])
+                .set_index("ISIN")[["AvgW_P", "EndW_P"]] / 100
+            )
+            daily_w = daily_w.rename(columns={"AvgW_P": "daily_포트비중", "EndW_P": "daily_AW"})
+            port_df = port_df.merge(daily_w, on="ISIN", how="left")
+            port_df["최종포트"] = port_df["daily_포트비중"].combine_first(port_df["최종포트"])
+            port_df["최종AW"] = port_df["daily_AW"].combine_first(port_df["최종AW"])
+            port_df = port_df.drop(columns=["daily_포트비중", "daily_AW"])
+            st.caption(f"포트비중/AW 기준일: {latest_label} (daily 브린슨 파일)")
+        except Exception as e:
+            st.warning(f"daily 비중 갱신 실패({latest_label}): {e}")
+
     ticker_map = dict(factor_detail.get("ticker_map", {}))
     ticker_map["US81369Y1001"] = "XLB"
     ticker_map["US81369Y5069"] = "XLE"
