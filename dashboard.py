@@ -1347,7 +1347,6 @@ def tab_portfolio_returns(df, factor_detail):
 
     # 전일(가장 최근) daily 브린슨 파일로 포트비중/AW 갱신
     daily_periods = list_brinson_daily_periods()
-    unheld_bm_sum = None
     if daily_periods:
         latest_label = list(daily_periods.keys())[-1]
         try:
@@ -1363,13 +1362,6 @@ def tab_portfolio_returns(df, factor_detail):
             port_df["최종AW"] = port_df["daily_AW"].combine_first(port_df["최종AW"])
             port_df = port_df.drop(columns=["daily_포트비중", "daily_AW"])
             st.caption(f"포트비중/AW 기준일: {latest_label} (daily 브린슨 파일)")
-
-            # D열(BM비중)에는 있는데 C열(포트비중)에는 없는 = 미보유 BM 종목
-            unheld = daily_stock_df[
-                daily_stock_df["AvgW_P"].isna() & daily_stock_df["AvgW_B"].notna()
-            ].copy()
-            unheld["Rtn_B_eff"] = unheld["Rtn_B"].combine_first(unheld["Rtn_D"])
-            unheld_bm_sum = ((unheld["AvgW_B"] / 100) * (unheld["Rtn_B_eff"] / 100)).sum()
         except Exception as e:
             st.warning(f"daily 비중 갱신 실패({latest_label}): {e}")
 
@@ -1444,11 +1436,11 @@ def tab_portfolio_returns(df, factor_detail):
         axis=1,
     )
 
-    # ── AW × 수익률 ──
-    merged["AWxD"] = merged["최종AW"] * merged["D_R"]
-    merged["AWx1W"] = merged["최종AW"] * merged["1W_R"]
-    merged["AWx1M"] = merged["최종AW"] * merged["1M_R"]
-    merged["AWxYTD"] = merged["최종AW"] * merged["YTD_R"]
+    # ── 포트비중(C열) × 수익률 ──
+    merged["AWxD"] = merged["최종포트"] * merged["D_R"]
+    merged["AWx1W"] = merged["최종포트"] * merged["1W_R"]
+    merged["AWx1M"] = merged["최종포트"] * merged["1M_R"]
+    merged["AWxYTD"] = merged["최종포트"] * merged["YTD_R"]
 
     def small_metric(col, label, v):
         color = "#2ca02c" if v >= 0 else "#d62728"
@@ -1464,10 +1456,18 @@ def tab_portfolio_returns(df, factor_detail):
 
     c1, c2, c3, c4 = st.columns(4)
     for col, label, v in zip([c1, c2, c3, c4], periods, port_vals):
-        small_metric(col, f"AW×{label} 합계", v)
+        small_metric(col, f"포트비중×{label} 합계", v)
 
-    if unheld_bm_sum is not None:
-        small_metric(c1, "미보유 BM종목 비중×수익률 합계", unheld_bm_sum)
+    # ── BM(URTH) 대비 상대수익률 ──
+    bm_live = fetch_live_returns((("US4642863926", "URTH"),))
+    bm_rec = bm_live.get("US4642863926", {})
+    bm_vals = [bm_rec.get("D") or 0, bm_rec.get("1W") or 0, bm_rec.get("1M") or 0, bm_rec.get("YTD") or 0]
+    rel_vals = [p - b for p, b in zip(port_vals, bm_vals)]
+
+    r1, r2, r3, r4 = st.columns(4)
+    for col, label, v in zip([r1, r2, r3, r4], periods, rel_vals):
+        small_metric(col, f"상대수익률({label})", v)
+    st.caption("BM: iShares MSCI World ETF (URTH, US4642863926)")
 
     st.divider()
 
@@ -1481,7 +1481,7 @@ def tab_portfolio_returns(df, factor_detail):
     disp = disp.sort_values("최종포트", ascending=False, na_position="last").reset_index(drop=True)
     disp.index += 1
     disp.columns = ["종목명", "섹터", "티커", "포트비중", "AW", "현재가(USD)",
-                     "AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
+                     "포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD"]
 
     # ret_color는 숫자값에 적용 (format 전에), NaN·비숫자 안전 처리
     def ret_color(v):
@@ -1498,7 +1498,7 @@ def tab_portfolio_returns(df, factor_detail):
     def _fmt_price(v):
         return "—" if (not isinstance(v, (int, float)) or pd.isna(v)) else f"{v:,.2f}"
 
-    ret_cols = ["AW×일간", "일간", "AW×1W", "1W", "AW×1M", "1M", "AW×YTD", "YTD"]
+    ret_cols = ["포트비중×일간", "일간", "포트비중×1W", "1W", "포트비중×1M", "1M", "포트비중×YTD", "YTD"]
     styled = (
         disp.style
         .format({
