@@ -816,6 +816,13 @@ def tab_overview(df, kpi, groupby2):
 
 def render_brinson_period(brinson, key_prefix="default"):
     total_row, sector_df, stock_df = brinson
+    sector_df = sector_df.copy()
+    stock_df = stock_df.copy()
+    sector_df["Rtn_B"] = sector_df["Rtn_B"].combine_first(sector_df["Rtn_D"])
+    stock_df["Rtn_B"] = stock_df["Rtn_B"].combine_first(stock_df["Rtn_D"])
+    if pd.isna(total_row.get("Rtn_B")):
+        total_row = dict(total_row)
+        total_row["Rtn_B"] = total_row.get("Rtn_D")
 
     sec = sector_df.sort_values("TotAttr", ascending=False)
     stock_cols = ["Name", "GICS", "AvgW_P", "AvgW_B", "Rtn_B", "TotAttr", "Selec"]
