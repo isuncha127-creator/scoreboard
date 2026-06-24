@@ -1606,7 +1606,8 @@ def tab_portfolio_returns(df, factor_detail):
 
     mmr_progress_raw = disp["진행률"].copy()
     disp["진행률"] = disp["진행률"].apply(
-        lambda v: "—" if not isinstance(v, (int, float)) or pd.isna(v) else f"{v*100:.0f}%"
+        lambda v: "—" if not isinstance(v, (int, float)) or pd.isna(v)
+        else ("100%+" if v >= 1 else f"{v*100:.0f}%")
     )
     disp["발동"] = disp["발동"].apply(
         lambda v: "—" if v is None or (isinstance(v, float) and pd.isna(v)) else ("🔴 손절" if v else "정상")
